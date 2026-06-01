@@ -19,8 +19,7 @@ export default function InputTab({
   cardPadding, isCompact, cardGap, handleStatusChange, expandedId, setExpandedId,
   textSizeBase, textSizeSub, renderComponentBadges, handleUnderstandingChange,
   openNoteModal, openEditModal, handleProposeGraduation, handleDeleteKPM,
-  visibleCount, filteredData, mobileLoadMoreRef,
-  handleAisearch, isAiLoading, predictGraduation
+  visibleCount, filteredData, mobileLoadMoreRef
 }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">

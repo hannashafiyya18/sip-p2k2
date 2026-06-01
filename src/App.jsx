@@ -22,9 +22,10 @@ import InputTab from './components/tabs/InputTab';
 import JurnalTab from './components/tabs/JurnalTab';
 import HistoryTab from './components/tabs/HistoryTab';
 import GraduasiTab from './components/tabs/GraduasiTab';
+import ChatBot from './components/layout/ChatBot';
 
 // --- IMPORT AI SERVICES ---
-import { generateJournalSummary, predictGraduation, parseAisearchQuery } from './services/ai';
+// import { generateJournalSummary, predictGraduation, parseAisearchQuery } from './services/ai';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -108,7 +109,7 @@ export default function App() {
   const [modal, setModal] = useState({ isOpen: false, type: 'alert', title: '', message: '', onConfirm: null });
   const [noteModal, setNoteModal] = useState({ isOpen: false, kpmId: null, kpmName: '', text: '' });
   const [editModal, setEditModal] = useState({ isOpen: false, data: null });
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  // const [isAiLoading, setIsAiLoading] = useState(false);
 
   // EFFECTS
   useEffect(() => {
@@ -307,7 +308,8 @@ export default function App() {
   const handleUpdateGraduationStatus = (item, status) => { updateKpmItem({ ...item, graduationStatus: status }); showToast(`Status diubah menjadi: ${status === 'ready' ? 'Siap Graduasi' : 'Usulan'}`); };
   const handleCancelGraduation = (item) => { updateKpmItem({ ...item, graduationStatus: null }); showToast("Usulan graduasi dibatalkan"); };
 
-  // --- AI ACTIONS ---
+  // --- AI ACTIONS (DISABELD / NOT USED AS PER USER REQUEST) ---
+  /*
   const handleAisearch = async (query) => {
     if (!query.trim()) return;
     setIsAiLoading(true);
@@ -350,6 +352,7 @@ export default function App() {
       setIsAiLoading(false);
     }
   };
+  */
 
   // --- PDF WRAPPERS ---
   const generateGraduationLetter = (kpm) => exportGraduationLetter({ kpm, currentConfig, setIsGeneratingPDF, showAlert, showToast });
@@ -480,7 +483,6 @@ export default function App() {
               textSizeBase={textSizeBase} textSizeSub={textSizeSub} renderComponentBadges={renderComponentBadges} handleUnderstandingChange={handleUnderstandingChange}
               openNoteModal={openNoteModal} openEditModal={openEditModal} handleProposeGraduation={handleProposeGraduation}
               handleDeleteKPM={handleDeleteKPM} visibleCount={visibleCount} filteredData={filteredData} mobileLoadMoreRef={mobileLoadMoreRef}
-              handleAisearch={handleAisearch} isAiLoading={isAiLoading} predictGraduation={predictGraduation}
            />
         )}
 
@@ -489,7 +491,6 @@ export default function App() {
               cardColor={cardColor} textColor={textColor} selectedGroupJurnal={selectedGroupJurnal}
               setShowGroupFilter={setShowGroupFilter} filteredJurnalData={filteredJurnalData}
               openNoteModal={openNoteModal} deleteNote={deleteNote}
-              handleGenerateSummary={handleGenerateSummary} isAiLoading={isAiLoading}
            />
         )}
 
@@ -517,6 +518,8 @@ export default function App() {
       </main>
 
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      <ChatBot stats={stats} dynamicGroups={dynamicGroups} />
 
       {/* --- LINGERING MODALS & POP-UPS --- */}
       {toast.show && (<div className="fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-gray-900 text-white dark:bg-white dark:text-black rounded-full shadow-2xl flex items-center gap-3 z-[100] animate-in slide-in-from-top-4 fade-in"><CheckCircle size={18} className="text-green-400 dark:text-green-600" /><span className="font-bold text-sm">{toast.message}</span></div>)}
