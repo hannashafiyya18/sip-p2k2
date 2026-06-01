@@ -1,0 +1,21 @@
+{
+  "short_name": "SIP-P2K2",
+  "name": "Sistem Informasi Pendamping P2K2",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "description": "Aplikasi manajemen data KPM untuk pendamping PKH"
+}
