@@ -130,7 +130,7 @@ export default function InputTab({
                                  <option value="">Pilih Modul...</option>{Object.keys(PKH_MODULES).map(m => <option key={m} value={m}>{m}</option>)}
                               </select>
                               {selectedModule && (
-                                 <select className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white mb-2" value={currentConfig.materi ? currentConfig.materi.split(`Modul ${selectedModule} - `)[1] || "" : ""} onChange={e => { if (e.target.value) handleConfigChange('materi', `Modul ${selectedModule} - ${e.target.value}`) }}>
+                                 <select className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white mb-2" value={currentConfig.materi ? currentConfig.materi.split(`Modul ${selectedModule} - `)[1] || "" : ""} onChange={e => handleConfigChange('materi', e.target.value ? `Modul ${selectedModule} - ${e.target.value}` : '')}>
                                     <option value="">Pilih Sesi...</option>{PKH_MODULES[selectedModule].map(s => <option key={s} value={s}>{s}</option>)}
                                  </select>
                               )}

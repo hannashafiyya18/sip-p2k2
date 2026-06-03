@@ -103,6 +103,7 @@ export default function App() {
   const mobileLoadMoreRef = useRef(null); 
   const fileInputRef = useRef(null);
   const scrollContainerRef = useRef(null); 
+  const prevSelectedGroupRef = useRef(selectedGroup);
   
   // MODALS
   const [toast, setToast] = useState({ show: false, message: '' });
@@ -167,8 +168,17 @@ export default function App() {
     const savedLogoKiri = localStorage.getItem(STORAGE_KEY_LOGO_KIRI); const savedLogoKanan = localStorage.getItem(STORAGE_KEY_LOGO_KANAN);
     if (savedLogoKiri) nextConfig.logoKiri = savedLogoKiri; if (savedLogoKanan) nextConfig.logoKanan = savedLogoKanan;
     setCurrentConfig(nextConfig);
-    if (nextConfig.materi) { const foundModule = Object.keys(PKH_MODULES).find(key => nextConfig.materi.includes(key)); if (foundModule) setSelectedModule(foundModule); else setSelectedModule(""); } 
-    else { setSelectedModule(""); }
+
+    const groupChanged = prevSelectedGroupRef.current !== selectedGroup;
+    prevSelectedGroupRef.current = selectedGroup;
+
+    if (nextConfig.materi) {
+      const foundModule = Object.keys(PKH_MODULES).find(key => nextConfig.materi.includes(key));
+      if (foundModule) setSelectedModule(foundModule);
+      else setSelectedModule("");
+    } else if (groupChanged) {
+      setSelectedModule("");
+    }
   }, [selectedGroup, groupConfigs]); 
   const filteredHistory = useMemo(() => {
       if (!Array.isArray(history)) return [];
