@@ -98,7 +98,7 @@ export const exportSemesterPDF = async ({ action, history, data, semesterYear, s
 
             const rows = sourceData.map((k, idx) => {
                 const s = k.presence ? { hadir: true, nilai: k.understanding } : { hadir: false, nilai: '-' }; const check = "V"; 
-                return [ idx + 1, k.name, k.group, s.hadir && s.nilai === "Kurang" ? check : "", s.hadir && s.nilai === "Baik" ? check : "", s.hadir && s.nilai === "Sangat Baik" ? check : "", (!s.hadir || s.nilai === "Tidak Dapat Dinilai") ? check : "", s.hadir && s.nilai === "Kurang" ? check : "", s.hadir && s.nilai === "Baik" ? check : "", s.hadir && s.nilai === "Sangat Baik" ? check : "", (!s.hadir || s.nilai === "Tidak Dapat Dinilai") ? check : "" ];
+                return [ idx + 1, k.name, k.group, s.hadir && s.nilai === "Kurang" ? check : "", s.hadir && s.nilai === "Baik" ? check : "", s.hadir && s.nilai === "Sangat Baik" ? check : "", (!s.hadir || s.nilai === "Tidak Dapat Dinilai" || s.nilai === "-") ? check : "", s.hadir && s.nilai === "Kurang" ? check : "", s.hadir && s.nilai === "Baik" ? check : "", s.hadir && s.nilai === "Sangat Baik" ? check : "", (!s.hadir || s.nilai === "Tidak Dapat Dinilai" || s.nilai === "-") ? check : "" ];
             });
             rows.push([ { content: 'TOTAL', colSpan: 3, styles: { halign: 'center', fontStyle: 'bold', fillColor: [220, 220, 220] } }, { content: totals.k, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.b, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.sb, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.na, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.k, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.b, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.sb, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.na, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } } ]);
 
@@ -159,12 +159,12 @@ export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bu
                 return acc;
             }, { hadir: 0, tidak: 0, kurang: 0, baik: 0, sangat: 0, nullVal: 0 });
 
-            const totalTidakDapatDinilai = totals.tidak + (groupData.filter(d => d.presence && d.understanding === 'Tidak Dapat Dinilai').length);
+            const totalTidakDapatDinilai = totals.tidak + (groupData.filter(d => d.presence && (d.understanding === 'Tidak Dapat Dinilai' || d.understanding === '-')).length);
 
             const rows = groupData.map((k, i) => {
-                const s = k.presence ? { hadir: true, nilai: k.understanding } : { hadir: false, nilai: '-' };
-                return [ i + 1, k.name, k.group, s.hadir ? "V" : "", !s.hadir ? "V" : "", s.hadir && s.nilai === "Kurang" ? "V" : "", s.hadir && s.nilai === "Baik" ? "V" : "", s.hadir && s.nilai === "Sangat Baik" ? "V" : "", (!s.hadir || s.nilai === "Tidak Dapat Dinilai") ? "V" : "" ];
-            });
+                 const s = k.presence ? { hadir: true, nilai: k.understanding } : { hadir: false, nilai: '-' };
+                 return [ i + 1, k.name, k.group, s.hadir ? "V" : "", !s.hadir ? "V" : "", s.hadir && s.nilai === "Kurang" ? "V" : "", s.hadir && s.nilai === "Baik" ? "V" : "", s.hadir && s.nilai === "Sangat Baik" ? "V" : "", (!s.hadir || s.nilai === "Tidak Dapat Dinilai" || s.nilai === "-") ? "V" : "" ];
+             });
 
             doc.autoTable({
                 startY: y + 5,

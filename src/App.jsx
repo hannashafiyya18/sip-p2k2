@@ -220,7 +220,7 @@ export default function App() {
   const closeModal = () => setModal({ ...modal, isOpen: false });
   const openNoteModal = (kpmId, kpmName, currentNote) => setNoteModal({ isOpen: true, kpmId, kpmName, text: currentNote || '' });
   const closeNoteModal = () => setNoteModal({ isOpen: false, kpmId: null, kpmName: '', text: '' });
-  const openEditModal = (item) => setEditModal({ isOpen: true, data: { ...item } });
+  const openEditModal = (item) => setEditModal({ isOpen: true, data: { ...item, components: item.components || {} } });
   const closeEditModal = () => setEditModal({ isOpen: false, data: null });
 
   // DATA ACTIONS
@@ -234,7 +234,7 @@ export default function App() {
   const deleteNote = (item) => updateKpmItem({ ...item, note: "" });
   const saveEditedKPM = () => { updateKpmItem(editModal.data); closeEditModal(); showToast("Data berhasil diperbarui"); };
   const handleEditChange = (field, value) => setEditModal(prev => ({ ...prev, data: { ...prev.data, [field]: value } }));
-  const handleComponentChange = (key, delta) => { setEditModal(prev => { const currentVal = prev.data.components[key] || 0; const newVal = Math.max(0, currentVal + delta); return { ...prev, data: { ...prev.data, components: { ...prev.data.components, [key]: newVal } } }; }); };
+  const handleComponentChange = (key, delta) => { setEditModal(prev => { const comps = prev.data.components || {}; const currentVal = comps[key] || 0; const newVal = Math.max(0, currentVal + delta); return { ...prev, data: { ...prev.data, components: { ...comps, [key]: newVal } } }; }); };
 
   const handleMarkAllPresent = () => { 
     if (filteredData.length === 0) return; 
@@ -760,10 +760,10 @@ export default function App() {
               <div className="bg-white dark:bg-gray-800 w-full sm:max-w-lg h-[90vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl p-6 overflow-y-auto animate-in slide-in-from-bottom-10 shadow-2xl">
                   <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-xl dark:text-white">Edit Data KPM</h3><button onClick={closeEditModal} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full"><X size={20}/></button></div>
                   <div className="space-y-4">
-                      <div><label className="text-xs font-bold text-gray-400 block mb-1">Nama Lengkap</label><input type="text" value={editModal.data.name} onChange={e=>handleEditChange('name',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 font-bold dark:text-white"/></div>
+                       <div><label className="text-xs font-bold text-gray-400 block mb-1">Nama Lengkap</label><input type="text" value={editModal.data.name || ""} onChange={e=>handleEditChange('name',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 font-bold dark:text-white"/></div>
                       <div className="grid grid-cols-2 gap-3">
                           <div><label className="text-xs font-bold text-gray-400 block mb-1">No KK</label><input type="text" value={editModal.data.noKK || ""} onChange={e=>handleEditChange('noKK',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white"/></div>
-                          <div><label className="text-xs font-bold text-gray-400 block mb-1">NIK</label><input type="text" value={editModal.data.nik} onChange={e=>handleEditChange('nik',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white"/></div>
+                          <div><label className="text-xs font-bold text-gray-400 block mb-1">NIK</label><input type="text" value={editModal.data.nik || ""} onChange={e=>handleEditChange('nik',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white"/></div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                           <div><label className="text-xs font-bold text-gray-400 block mb-1">Desa</label><input type="text" value={editModal.data.desa || ""} onChange={e=>handleEditChange('desa',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white"/></div>
