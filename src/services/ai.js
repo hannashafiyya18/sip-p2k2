@@ -1,4 +1,4 @@
-const API_KEY = "REDACTED_LEAKED_API_KEY";
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "REDACTED_LEAKED_API_KEY";
 
 export const callGemini = async (prompt) => {
   const models = [

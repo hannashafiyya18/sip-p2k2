@@ -126,21 +126,51 @@ export default function App() {
   };
 
   useEffect(() => {
-    const initAuth = async () => {
-        if (!auth) {
-            setLoadingAuth(false);
-            try {
-                const savedData = localStorage.getItem(STORAGE_KEY_DATA); setData(savedData ? (Array.isArray(JSON.parse(savedData)) ? JSON.parse(savedData) : []) : []);
-                const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY); setHistory(savedHistory ? (Array.isArray(JSON.parse(savedHistory)) ? JSON.parse(savedHistory) : []) : []);
-                const savedConfig = localStorage.getItem(STORAGE_KEY_CONFIG); setGroupConfigs(savedConfig ? JSON.parse(savedConfig) : {});
-            } catch { setData(INITIAL_DATA); setHistory([]); }
-            return;
+    // 1. Handle jika auth tidak ada / mode offline
+    if (!auth) {
+        setLoadingAuth(false);
+        try {
+            const savedData = localStorage.getItem(STORAGE_KEY_DATA); 
+            setData(savedData ? (Array.isArray(JSON.parse(savedData)) ? JSON.parse(savedData) : []) : []);
+            const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY); 
+            setHistory(savedHistory ? (Array.isArray(JSON.parse(savedHistory)) ? JSON.parse(savedHistory) : []) : []);
+            const savedConfig = localStorage.getItem(STORAGE_KEY_CONFIG); 
+            setGroupConfigs(savedConfig ? JSON.parse(savedConfig) : {});
+        } catch { 
+            setData(INITIAL_DATA); setHistory([]); 
         }
-        if (typeof window !== 'undefined' && typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) { try { await signInWithCustomToken(auth, window.__initial_auth_token); } catch (e) { console.warn("Custom token failed", e); } } 
-        else { await signInAnonymously(auth); }
-    };
-    initAuth();
-    if (auth) { const unsubscribe = onAuthStateChanged(auth, async (currentUser) => { setUser(currentUser); setLoadingAuth(false); }); return () => unsubscribe(); }
+        return;
+    }
+
+    // 2. Gunakan onAuthStateChanged sebagai penentu utama (Single Source of Truth)
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        if (currentUser) {
+            // Jika sebelumnya sudah ada sesi (Google atau Tamu), gunakan sesi tersebut
+            setUser(currentUser);
+        } else {
+            // Cek apakah ada token khusus dari window
+            if (typeof window !== 'undefined' && typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) { 
+                try { 
+                    await signInWithCustomToken(auth, window.__initial_auth_token); 
+                } catch (e) { 
+                    console.warn("Custom token failed", e); 
+                    // Fallback jika token gagal
+                    await signInAnonymously(auth);
+                } 
+            } else {
+                // Jika benar-benar baru pertama kali buka, buat sesi tamu baru
+                try {
+                    await signInAnonymously(auth);
+                } catch (e) {
+                    console.error("Gagal membuat sesi anonim", e);
+                }
+            }
+        }
+        // Matikan loading HANYA setelah pengecekan selesai
+        setLoadingAuth(false); 
+    });
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
