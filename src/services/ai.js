@@ -2,7 +2,6 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "REDACTED_LEAKED_API_KEY"
 
 export const callGemini = async (prompt) => {
   const models = [
-    "gemini-2.0-flash-lite",
     "gemini-1.5-flash",
   ];
 
@@ -70,13 +69,13 @@ Syarat:
  */
 export const predictGraduation = (kpm) => {
   if (!kpm.components) return { eligible: false, reason: "" };
-  
+
   const comps = kpm.components;
   const totalComponents = Object.values(comps).reduce((a, b) => a + (b || 0), 0);
   if (totalComponents === 0) return { eligible: false, reason: "" };
-  
+
   const totalChildren = (comps.sd || 0) + (comps.smp || 0) + (comps.sma || 0) + (comps.balita || 0) + (comps.hamil || 0);
-  
+
   // Rule simple: Jika sudah tidak punya anak sekolah, bumil, atau balita (hanya lansia/disabilitas)
   if (totalChildren === 0) {
     if (comps.lansia || comps.disabilitas) {
