@@ -2,7 +2,7 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "REDACTED_LEAKED_API_KEY"
 
 export const callGemini = async (prompt) => {
   const models = [
-    "gemini-1.5-flash",
+    "gemini-3.5-flash",
   ];
 
   for (const model of models) {
