@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw, 
   History, CheckCheck, Save, Search, Check, Minus, AlertTriangle,
-  Camera, Image as ImageIcon
+  Camera, Image as ImageIcon, HelpCircle
 } from 'lucide-react';
 
 // --- IMPORT FIREBASE ---
@@ -245,8 +245,8 @@ export default function App() {
 
   // UI ACTIONS
   const showToast = (message) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
-  const showAlert = (title, message) => setModal({ isOpen: true, type: 'alert', title, message, onConfirm: null });
-  const showConfirm = (title, message, onConfirm) => setModal({ isOpen: true, type: 'confirm', title, message, onConfirm });
+  const showAlert = (title, message) => setModal({ isOpen: true, type: 'alert', title, message, onConfirm: null, variant: 'danger' });
+  const showConfirm = (title, message, onConfirm, variant = 'danger') => setModal({ isOpen: true, type: 'confirm', title, message, onConfirm, variant });
   const closeModal = () => setModal({ ...modal, isOpen: false });
   const openNoteModal = (kpmId, kpmName, currentNote) => setNoteModal({ isOpen: true, kpmId, kpmName, text: currentNote || '' });
   const closeNoteModal = () => setNoteModal({ isOpen: false, kpmId: null, kpmName: '', text: '' });
@@ -255,14 +255,20 @@ export default function App() {
 
   // DATA ACTIONS
   const updateKpmItem = async (updatedItem) => {
-    const cleanItem = sanitizeForFirestore(updatedItem); setData(prev => prev.map(item => item.id === cleanItem.id ? cleanItem : item));
+    const cleanItem = sanitizeForFirestore(updatedItem);
+    setData(prev => prev.some(item => item.id === cleanItem.id) ? prev.map(item => item.id === cleanItem.id ? cleanItem : item) : [cleanItem, ...prev]);
     if (user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(cleanItem.id)), cleanItem); }
   };
   const handleStatusChange = (item) => updateKpmItem({ ...item, presence: !item.presence, understanding: !item.presence ? "Baik" : "-" });
   const handleUnderstandingChange = (item, newVal) => updateKpmItem({ ...item, understanding: newVal });
   const saveNote = () => { const item = data.find(i => i.id === noteModal.kpmId); if (item) { updateKpmItem({ ...item, note: noteModal.text }); showToast("Catatan disimpan"); } closeNoteModal(); };
   const deleteNote = (item) => updateKpmItem({ ...item, note: "" });
-  const saveEditedKPM = () => { updateKpmItem(editModal.data); closeEditModal(); showToast("Data berhasil diperbarui"); };
+  const saveEditedKPM = () => {
+    if (!editModal.data.name || !editModal.data.name.trim()) { showAlert("Nama Kosong", "Nama lengkap KPM wajib diisi."); return; }
+    updateKpmItem({ ...editModal.data, name: editModal.data.name.trim(), group: (editModal.data.group || "").trim() || "Umum" });
+    closeEditModal();
+    showToast(editModal.isNew ? "KPM baru berhasil ditambahkan" : "Data berhasil diperbarui");
+  };
   const handleEditChange = (field, value) => setEditModal(prev => ({ ...prev, data: { ...prev.data, [field]: value } }));
   const handleComponentChange = (key, delta) => { setEditModal(prev => { const comps = prev.data.components || {}; const currentVal = comps[key] || 0; const newVal = Math.max(0, currentVal + delta); return { ...prev, data: { ...prev.data, components: { ...comps, [key]: newVal } } }; }); };
 
@@ -277,13 +283,13 @@ export default function App() {
             await batch.commit();
         }
         closeModal(); showToast("Semua KPM ditandai Hadir");
-    }); 
+    }, 'primary');
   };
 
-  const handleAddKPM = async () => {
+  const handleAddKPM = () => {
     const newId = Date.now(); const groupToAdd = selectedGroup === "Semua Kelompok" ? (dynamicGroups[1] || "Umum") : selectedGroup;
-    const newItem = { id: newId, name: "Nama KPM Baru", nik: "-", noKK: "-", bpnt: false, group: groupToAdd, address: "-", components: {}, presence: false, understanding: "-", note: "", graduationStatus: null, desa: "", kecamatan: "", kabupaten: "", provinsi: "" };
-    if (user && db) await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(newId)), sanitizeForFirestore(newItem)); else setData([newItem, ...data]); showToast("Data KPM ditambahkan");
+    const newItem = { id: newId, name: "", nik: "", noKK: "", bpnt: false, group: groupToAdd, address: "", components: {}, presence: false, understanding: "-", note: "", graduationStatus: null, desa: "", kecamatan: "", kabupaten: "", provinsi: "" };
+    setEditModal({ isOpen: true, data: newItem, isNew: true });
   };
 
   const handleDeleteKPM = async (id) => showConfirm("Hapus Data", "Permanen?", async () => { if (user && db) await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(id))); else setData(prev => prev.filter(item => item.id !== id)); closeModal(); showToast("Dihapus"); });
@@ -417,10 +423,11 @@ export default function App() {
                  if (clean.length >= 2) {
                      const components = {}; const parseComp = (idx, key) => { const val = parseInt(clean[idx]); if (!isNaN(val) && val > 0) components[key] = val; };
                      parseComp(11, 'balita'); parseComp(12, 'sd'); parseComp(13, 'smp'); parseComp(14, 'sma'); parseComp(15, 'disabilitas'); parseComp(16, 'lansia'); parseComp(17, 'hamil');
-                     newData.push(sanitizeForFirestore({ id: currentId++, name: clean[1] || "No Name", noKK: clean[2] || "-", nik: clean[3] || "-", address: clean[4] || "-", group: clean[21] || "Umum", desa: clean[5] || "-", kecamatan: clean[6] || "-", kabupaten: clean[7] || "-", provinsi: clean[8] || "-", bpnt: clean[22] === 'YA' || clean[13] === '22', components, presence: false, understanding: '-', note: "", graduationStatus: null }));
+                     newData.push(sanitizeForFirestore({ id: currentId++, name: clean[1] || "No Name", noKK: clean[2] || "-", nik: clean[3] || "-", address: clean[4] || "-", group: clean[21] || "Umum", desa: clean[5] || "-", kecamatan: clean[6] || "-", kabupaten: clean[7] || "-", provinsi: clean[8] || "-", bpnt: clean[22] === 'YA', components, presence: false, understanding: '-', note: "", graduationStatus: null }));
                  }
              }
-             if (newData.length > 0) { if (data.length > 0) { setPendingImport(newData); setImportModalOpen(true); } else { processImport(newData, false); } }
+             if (newData.length > 0) { setPendingImport(newData); setImportModalOpen(true); }
+             else { showAlert("Import Gagal", "Tidak ada baris data valid yang ditemukan di file CSV ini. Periksa kembali format file-nya."); }
          } catch { showAlert("Error", "Gagal import CSV"); } finally { if(fileInputRef.current) fileInputRef.current.value = ""; }
      }; 
      reader.readAsText(file);
@@ -448,12 +455,73 @@ export default function App() {
       } catch (e) { console.error("Import failed", e); showAlert("Error", "Gagal menyimpan data import ke database."); }
   };
 
+  // --- BACKUP & RESTORE ---
+  const handleBackupData = () => {
+    if (data.length === 0 && history.length === 0) { showAlert("Data Kosong", "Belum ada data KPM atau riwayat untuk dibackup."); return; }
+    const backup = { app: 'SIP-P2K2', version: 1, exportedAt: new Date().toISOString(), data, history, groupConfigs };
+    const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `Backup_SIP-P2K2_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showToast("File backup berhasil diunduh");
+  };
+
+  const restoreBackup = async (backup) => {
+    try {
+        const newData = (backup.data || []).map(item => sanitizeForFirestore(item));
+        const newHistory = (backup.history || []).map(item => sanitizeForFirestore(item));
+        const newConfigs = backup.groupConfigs || {};
+        if (user && db) {
+            const chunkSize = 400;
+            for (let i = 0; i < data.length; i += chunkSize) {
+                const chunk = data.slice(i, i + chunkSize); const batch = writeBatch(db);
+                chunk.forEach(item => batch.delete(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id))));
+                await batch.commit();
+            }
+            for (let i = 0; i < history.length; i += chunkSize) {
+                const chunk = history.slice(i, i + chunkSize); const batch = writeBatch(db);
+                chunk.forEach(item => batch.delete(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(item.id))));
+                await batch.commit();
+            }
+            for (let i = 0; i < newData.length; i += chunkSize) {
+                const chunk = newData.slice(i, i + chunkSize); const batch = writeBatch(db);
+                chunk.forEach(item => batch.set(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)), item));
+                await batch.commit();
+            }
+            for (let i = 0; i < newHistory.length; i += chunkSize) {
+                const chunk = newHistory.slice(i, i + chunkSize); const batch = writeBatch(db);
+                chunk.forEach(item => batch.set(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(item.id)), item));
+                await batch.commit();
+            }
+        }
+        setData(newData); setHistory(newHistory); setGroupConfigs(newConfigs);
+        localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs));
+        showToast("Backup berhasil dipulihkan");
+    } catch (e) { console.error("Restore failed", e); showAlert("Error", "Gagal memulihkan backup ke database."); }
+  };
+
+  const handleRestoreFile = (event) => {
+    const file = event.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const backup = JSON.parse(e.target.result);
+            if (!backup || backup.app !== 'SIP-P2K2' || !Array.isArray(backup.data)) { showAlert("File Tidak Valid", "File ini bukan file backup SIP-P2K2."); return; }
+            showConfirm("Pulihkan Backup?", `Backup berisi ${backup.data.length} data KPM dan ${(backup.history || []).length} riwayat (dibuat ${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString('id-ID') : '-'}). SEMUA data saat ini akan DIGANTI dengan isi backup. Lanjutkan?`, () => restoreBackup(backup));
+        } catch { showAlert("Error", "Gagal membaca file backup."); }
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  };
+
   const handleArchiveSession = async () => {
      if(filteredData.length===0) return; 
      showConfirm("Selesai & Reset Sesi?", `Simpan ${filteredData.length} data ke Riwayat, lalu RESET ceklis kehadiran agar kosong untuk bulan depan?`, 
          async () => {
              const present = filteredData.filter(d=>d.presence).length;
-             const sessionDetails = filteredData.map(k => ({ name: k.name, group: k.group, presence: k.presence, understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {} }));
+             const sessionDetails = filteredData.map(k => ({ name: k.name, group: k.group, presence: k.presence, understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {}, note: k.note || "" }));
              const newHist = sanitizeForFirestore({ id: Date.now(), date: currentConfig.tanggal, groupName: selectedGroup, materi: currentConfig.materi, tempat: currentConfig.tempat, pemateri: currentConfig.pemateri, fotoKegiatan: currentConfig.fotoKegiatan, logoKiri: currentConfig.logoKiri, logoKanan: currentConfig.logoKanan, stats: { total: filteredData.length, present, absent: filteredData.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
              const newHistory = [newHist, ...history]; setHistory(newHistory);
              
@@ -475,11 +543,20 @@ export default function App() {
                  await batch.commit();
              }
              closeModal(); setActiveTab('history'); showToast("Sesi Disimpan & Data Direset");
-         }
+         },
+         'primary'
      );
   };
 
-  const handleLogin = async () => { if (!auth) { showAlert("Error", "Ganti API Key Firebase Anda terlebih dahulu di file config."); return; } try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { showAlert("Login Gagal", e.message); } };
+  const doGoogleLogin = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { showAlert("Login Gagal", e.message); } };
+  const handleLogin = async () => {
+    if (!auth) { showAlert("Error", "Ganti API Key Firebase Anda terlebih dahulu di file config."); return; }
+    if (user?.isAnonymous && (data.length > 0 || history.length > 0)) {
+        showConfirm("Login dengan Google?", `Ada ${data.length} data KPM dan ${history.length} riwayat di sesi Tamu ini. Data Tamu TIDAK otomatis pindah ke akun Google. Sebaiknya unduh Backup dulu (menu Tools > Backup Data), lalu pulihkan setelah login. Tetap lanjut login?`, doGoogleLogin, 'primary');
+        return;
+    }
+    doGoogleLogin();
+  };
   const handleLogout = async () => { if (user) await signOut(auth); setUser(null); };
   const handleScroll = () => { if (scrollContainerRef.current) { const scrollLeft = scrollContainerRef.current.scrollLeft; const width = scrollContainerRef.current.offsetWidth; const index = Math.round(scrollLeft / width); setCurrentSlide(index); } };
 
@@ -514,7 +591,8 @@ export default function App() {
               currentSlide={currentSlide} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setShowGroupFilter={setShowGroupFilter}
               selectedGroup={selectedGroup} textColor={textColor} showToolsMenu={showToolsMenu} setShowToolsMenu={setShowToolsMenu}
               handleAddKPM={handleAddKPM} handleMarkAllPresent={handleMarkAllPresent} handleArchiveSession={handleArchiveSession}
-              handleDeleteAllData={handleDeleteAllData} showReportConfig={showReportConfig} isConfigOpen={isConfigOpen}
+              handleDeleteAllData={handleDeleteAllData} handleBackupData={handleBackupData} handleRestoreFile={handleRestoreFile}
+              showReportConfig={showReportConfig} isConfigOpen={isConfigOpen}
               setIsConfigOpen={setIsConfigOpen} currentConfig={currentConfig} handleConfigChange={handleConfigChange}
               selectedModule={selectedModule} setSelectedModule={setSelectedModule} isCompressing={isCompressing}
               handlePhotoUpload={handlePhotoUpload} handleLogoKiriUpload={handleLogoKiriUpload} handleLogoKananUpload={handleLogoKananUpload}
@@ -574,16 +652,46 @@ export default function App() {
           </div>
       )}
 
-      {importModalOpen && (
-          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl max-w-sm w-full animate-in zoom-in-95">
-                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto"><FileText size={24}/></div>
-                  <h3 className="font-bold text-lg mb-2 text-center dark:text-white">Konfirmasi Import</h3>
-                  <p className="text-sm text-gray-500 text-center mb-6">Anda sudah memiliki data. Apa yang ingin Anda lakukan dengan data baru?</p>
-                  <div className="flex flex-col gap-3">
-                      <button onClick={() => processImport(pendingImport, false)} className="p-3 rounded-xl bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition text-sm flex items-center justify-center gap-2 border border-blue-200"><Plus size={16}/> Tambahkan (Append)</button>
-                      <button onClick={() => processImport(pendingImport, true)} className="p-3 rounded-xl bg-red-50 text-red-700 font-bold hover:bg-red-100 transition text-sm flex items-center justify-center gap-2 border border-red-200"><RefreshCw size={16}/> Ganti Semua (Replace)</button>
-                      <button onClick={() => { setImportModalOpen(false); setPendingImport(null); }} className="p-3 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition text-sm mt-2">Batal</button>
+      {importModalOpen && pendingImport && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl max-w-lg w-full animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                  <div className="flex items-center gap-3 mb-4">
+                      <div className="w-11 h-11 bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0"><FileText size={22}/></div>
+                      <div>
+                          <h3 className="font-bold text-lg dark:text-white leading-tight">Pratinjau Import CSV</h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Terbaca <span className="font-bold text-blue-600 dark:text-blue-400">{pendingImport.length} KPM</span> — periksa dulu sebelum diimpor</p>
+                      </div>
+                  </div>
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-3">
+                      <table className="w-full text-xs">
+                          <thead>
+                              <tr className="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
+                                  <th className="text-left font-bold px-3 py-2">Nama</th>
+                                  <th className="text-left font-bold px-3 py-2">NIK</th>
+                                  <th className="text-left font-bold px-3 py-2">Kelompok</th>
+                                  <th className="text-center font-bold px-3 py-2">Komponen</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              {pendingImport.slice(0, 5).map((row, i) => (
+                                  <tr key={i} className="border-t border-gray-100 dark:border-gray-700">
+                                      <td className="px-3 py-2 font-bold text-gray-800 dark:text-gray-100 truncate max-w-[140px]">{row.name}</td>
+                                      <td className="px-3 py-2 text-gray-500 dark:text-gray-400 truncate max-w-[110px]">{row.nik}</td>
+                                      <td className="px-3 py-2 text-gray-500 dark:text-gray-400 truncate max-w-[100px]">{row.group}</td>
+                                      <td className="px-3 py-2 text-center text-gray-600 dark:text-gray-300 font-bold">{Object.values(row.components || {}).reduce((a, b) => a + b, 0)}</td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                      {pendingImport.length > 5 && <p className="text-[10px] text-gray-400 text-center py-1.5 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">…dan {pendingImport.length - 5} baris lainnya</p>}
+                  </div>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-4">Jika nama/kelompok terlihat salah kolom, kemungkinan format CSV berbeda — batalkan dan periksa file-nya.</p>
+                  <div className="flex flex-col gap-2.5">
+                      <button onClick={() => processImport(pendingImport, false)} className="p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-[0.98]"><Plus size={16}/> Tambahkan ke Data Sekarang</button>
+                      {data.length > 0 && (
+                          <button onClick={() => processImport(pendingImport, true)} className="p-3 rounded-xl bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition text-sm flex items-center justify-center gap-2 border border-red-200 dark:border-red-900 active:scale-[0.98]"><RefreshCw size={16}/> Ganti Semua Data Lama ({data.length} KPM)</button>
+                      )}
+                      <button onClick={() => { setImportModalOpen(false); setPendingImport(null); }} className="p-3 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm active:scale-[0.98]">Batal</button>
                   </div>
               </div>
           </div>
@@ -788,9 +896,13 @@ export default function App() {
       {editModal.isOpen && editModal.data && (
           <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
               <div className="bg-white dark:bg-gray-800 w-full sm:max-w-lg h-[90vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl p-6 overflow-y-auto animate-in slide-in-from-bottom-10 shadow-2xl">
-                  <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-xl dark:text-white">Edit Data KPM</h3><button onClick={closeEditModal} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full"><X size={20}/></button></div>
+                  <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-xl dark:text-white">{editModal.isNew ? 'Tambah KPM Baru' : 'Edit Data KPM'}</h3><button onClick={closeEditModal} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full"><X size={20}/></button></div>
                   <div className="space-y-4">
-                       <div><label className="text-xs font-bold text-gray-400 block mb-1">Nama Lengkap</label><input type="text" value={editModal.data.name || ""} onChange={e=>handleEditChange('name',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 font-bold dark:text-white"/></div>
+                       <div><label className="text-xs font-bold text-gray-400 block mb-1">Nama Lengkap <span className="text-red-500">*</span></label><input type="text" autoFocus={!!editModal.isNew} placeholder="Nama lengkap KPM..." value={editModal.data.name || ""} onChange={e=>handleEditChange('name',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 font-bold dark:text-white"/></div>
+                      <div className="grid grid-cols-2 gap-3">
+                          <div><label className="text-xs font-bold text-gray-400 block mb-1">Kelompok</label><input type="text" value={editModal.data.group || ""} onChange={e=>handleEditChange('group',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white" placeholder="Nama kelompok..."/></div>
+                          <div><label className="text-xs font-bold text-gray-400 block mb-1">Alamat</label><input type="text" value={editModal.data.address || ""} onChange={e=>handleEditChange('address',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white" placeholder="Alamat..."/></div>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                           <div><label className="text-xs font-bold text-gray-400 block mb-1">No KK</label><input type="text" value={editModal.data.noKK || ""} onChange={e=>handleEditChange('noKK',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white"/></div>
                           <div><label className="text-xs font-bold text-gray-400 block mb-1">NIK</label><input type="text" value={editModal.data.nik || ""} onChange={e=>handleEditChange('nik',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white"/></div>
@@ -834,13 +946,13 @@ export default function App() {
       )}
 
       {modal.isOpen && (
-          <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
-              <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 text-center">
-                  <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32}/></div>
-                  <h3 className="font-bold text-lg mb-2 dark:text-white">{modal.title}</h3><p className="text-sm text-gray-500 mb-6">{modal.message}</p>
+          <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${modal.variant === 'primary' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>{modal.variant === 'primary' ? <HelpCircle size={32}/> : <AlertTriangle size={32}/>}</div>
+                  <h3 className="font-bold text-lg mb-2 dark:text-white">{modal.title}</h3><p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{modal.message}</p>
                   <div className="flex gap-3">
-                      <button onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">Batal</button>
-                      {modal.type === 'confirm' && (<button onClick={() => { modal.onConfirm(); closeModal(); }} className="flex-1 py-3 rounded-xl font-bold bg-red-600 text-white shadow-lg shadow-red-600/20">Ya, Lanjutkan</button>)}
+                      <button onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-[0.98] transition">Batal</button>
+                      {modal.type === 'confirm' && (<button onClick={() => { modal.onConfirm(); closeModal(); }} className={`flex-1 py-3 rounded-xl font-bold text-white shadow-lg active:scale-[0.98] transition ${modal.variant === 'primary' ? 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-700' : 'bg-red-600 shadow-red-600/20 hover:bg-red-700'}`}>Ya, Lanjutkan</button>)}
                   </div>
               </div>
           </div>

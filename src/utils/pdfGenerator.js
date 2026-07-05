@@ -1,14 +1,13 @@
 // src/utils/pdfGenerator.js
-import { loadScript, getImageDimensions } from './helpers';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import { getImageDimensions } from './helpers';
 import { DEFAULT_CONFIG } from './constants';
 
 export const exportGraduationLetter = async ({ kpm, currentConfig, setIsGeneratingPDF, showAlert, showToast }) => {
     setIsGeneratingPDF(true);
     try {
-        try { await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"); } catch (err) { console.error("Script load error:", err); showAlert("Koneksi Error", "Gagal memuat sistem PDF. Pastikan internet lancar."); setIsGeneratingPDF(false); return; }
-        if (!window.jspdf || !window.jspdf.jsPDF) { showAlert("System Error", "Sistem PDF tidak terinisialisasi. Coba refresh halaman."); setIsGeneratingPDF(false); return; }
-        
-        const { jsPDF } = window.jspdf; const doc = new jsPDF();
+        const doc = new jsPDF();
         const safeName = kpm.name || "-"; const safeNik = kpm.nik || "-"; const safeAddress = kpm.address || "-"; const safeDesa = kpm.desa || "-"; const safeKec = kpm.kecamatan || "-"; const safeKab = kpm.kabupaten || "-"; const safeProv = kpm.provinsi || "-";
 
         if (currentConfig.logoKiri) { const dims = await getImageDimensions(currentConfig.logoKiri); if (dims.width > 0) { const targetHeight = 25; const ratio = dims.width / dims.height; const targetWidth = targetHeight * ratio; doc.addImage(currentConfig.logoKiri, 'JPEG', 15, 10, targetWidth, targetHeight); } }
@@ -57,9 +56,7 @@ export const exportGraduationLetter = async ({ kpm, currentConfig, setIsGenerati
 export const exportSemesterPDF = async ({ action, history, data, semesterYear, selectedSemester, semesterGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl }) => {
     setIsGeneratingPDF(true);
     try {
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"); 
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"); 
-        const { jsPDF } = window.jspdf; const doc = new jsPDF("landscape");
+        const doc = new jsPDF("landscape");
         const startMonth = selectedSemester === 1 ? 0 : 6; const endMonth = selectedSemester === 1 ? 5 : 11;
         
         const semesterHistory = history.filter(h => {
@@ -123,9 +120,7 @@ export const exportSemesterPDF = async ({ action, history, data, semesterYear, s
 export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bulananMonth, bulananGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl }) => {
     setIsGeneratingPDF(true); 
     try { 
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"); 
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"); 
-        const { jsPDF } = window.jspdf; const doc = new jsPDF(); 
+        const doc = new jsPDF();
 
         const bulananHistory = history.filter(h => {
             if (!h || !h.date) return false;
@@ -203,9 +198,7 @@ export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bu
 export const exportAbsensiPDF = async ({ action, data, selectedGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl }) => {
     setIsGeneratingPDF(true); 
     try { 
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"); 
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"); 
-        const { jsPDF } = window.jspdf; const doc = new jsPDF("landscape", "mm", "a4"); 
+        const doc = new jsPDF("landscape", "mm", "a4");
 
         let groupsToPrint = [];
         if (selectedGroup === "Semua Kelompok") {

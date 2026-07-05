@@ -1,5 +1,6 @@
 import React from 'react';
-import { FileText, ChevronDown, Loader2, Eye, Download, FileBadge, Filter, History, Pencil, Trash2 } from 'lucide-react';
+import { FileText, ChevronDown, Loader2, Eye, Download, FileBadge, Filter, History, Pencil, Trash2, Archive } from 'lucide-react';
+import EmptyState from '../ui/EmptyState';
 
 export default function HistoryTab({
   isLaporanBulananOpen, setIsLaporanBulananOpen, setShowBulananMonthModal,
@@ -107,8 +108,12 @@ export default function HistoryTab({
         </div>
 
         {filteredHistory.length === 0 ? (
-            <div className="text-center py-20 opacity-50"><History size={48} className="mx-auto mb-4"/><p className={textColor}>Tidak ada data untuk filter ini.</p></div>
-        ) : ( 
+            <EmptyState
+                title="Belum Ada Riwayat"
+                description={"Tidak ada sesi pertemuan pada filter ini.\nCoba ganti tahun/bulan/kelompok, atau arsipkan sesi\ndari tab Input (menu Tools > Selesai & Reset)."}
+                icons={[Filter, History, Archive]}
+            />
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredHistory.map(h => (
                 <div key={h.id} className={`p-5 rounded-2xl ${cardColor} shadow-sm border-l-4 border-l-blue-500 relative group animate-in zoom-in-95 flex flex-col justify-between`}>

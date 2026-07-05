@@ -1,5 +1,6 @@
 import React from 'react';
-import { GraduationCap, X, CheckCheck, RotateCcw, Loader2, FileText } from 'lucide-react';
+import { GraduationCap, X, CheckCheck, RotateCcw, Loader2, FileText, Award, Sparkles } from 'lucide-react';
+import EmptyState from '../ui/EmptyState';
 
 export default function GraduasiTab({
   cardColor, textColor, filteredGraduationData,
@@ -15,10 +16,11 @@ export default function GraduasiTab({
         </div>
         
         {filteredGraduationData.length === 0 ? (
-            <div className="text-center py-10 opacity-50">
-                <p className={textColor}>Belum ada usulan graduasi.</p>
-                <p className="text-xs text-gray-400">Silakan usulkan dari menu Input.</p>
-            </div>
+            <EmptyState
+                title="Belum Ada Usulan Graduasi"
+                description={"KPM yang sudah mandiri bisa diusulkan graduasi\ndari tab Input (buka detail KPM > Usulkan Graduasi)."}
+                icons={[Award, GraduationCap, Sparkles]}
+            />
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredGraduationData.map(item => (

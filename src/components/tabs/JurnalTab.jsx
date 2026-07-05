@@ -1,5 +1,6 @@
 import React from 'react';
-import { ChevronDown, StickyNote, Edit2, Trash2 } from 'lucide-react';
+import { ChevronDown, StickyNote, Edit2, Trash2, PenLine, BookOpen } from 'lucide-react';
+import EmptyState from '../ui/EmptyState';
 
 export default function JurnalTab({
   cardColor, textColor, selectedGroupJurnal, setShowGroupFilter,
@@ -14,10 +15,11 @@ export default function JurnalTab({
             </button>
         </div>
         {filteredJurnalData.length === 0 ? (
-            <div className="text-center py-20 opacity-50">
-                <StickyNote size={48} className="mx-auto mb-4"/>
-                <p className={textColor}>Belum ada catatan jurnal.</p>
-            </div>
+            <EmptyState
+                title="Belum Ada Catatan Jurnal"
+                description={"Tulis catatan perkembangan KPM dari tab Input\n(buka detail KPM lalu pilih tombol Catatan)."}
+                icons={[PenLine, StickyNote, BookOpen]}
+            />
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredJurnalData.map(item => (

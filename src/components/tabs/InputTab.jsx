@@ -7,12 +7,14 @@ import {
 } from 'lucide-react';
 import { PKH_MODULES, UNDERSTANDING_LEVELS } from '../../utils/constants';
 import { formatRupiah, calculateTotalAid } from '../../utils/helpers';
+import EmptyState from '../ui/EmptyState';
 
 export default function InputTab({
   scrollContainerRef, handleScroll, cardColor, subText, stats, currentSlide,
   searchTerm, setSearchTerm, setShowGroupFilter, selectedGroup, textColor,
   showToolsMenu, setShowToolsMenu, handleAddKPM, handleMarkAllPresent,
-  handleArchiveSession, handleDeleteAllData, showReportConfig, isConfigOpen,
+  handleArchiveSession, handleDeleteAllData, handleBackupData, handleRestoreFile,
+  showReportConfig, isConfigOpen,
   setIsConfigOpen, currentConfig, handleConfigChange, selectedModule,
   setSelectedModule, isCompressing, handlePhotoUpload, handleLogoKiriUpload,
   handleLogoKananUpload, generateAbsensiPDF, isGeneratingPDF, paginatedData,
@@ -50,7 +52,7 @@ export default function InputTab({
                       <div className="relative z-10">
                           <p className="text-xs font-bold uppercase tracking-wider text-yellow-600 dark:text-yellow-500 flex items-center gap-2"><Banknote size={14}/> Total Estimasi Dana</p>
                           <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1 tracking-tight">{formatRupiah(stats.totalAid)}</h2>
-                          <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">*Estimasi bantuan untuk {stats.total} KPM</p>
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">*Estimasi untuk {stats.total} KPM{stats.total > 0 && <> &bull; rata-rata <span className="font-bold">{formatRupiah(Math.round(stats.totalAid / stats.total))}</span>/KPM</>}</p>
                       </div>
                   </div>
               </div>
@@ -78,7 +80,7 @@ export default function InputTab({
           </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 sticky top-[70px] z-30 pt-2"> 
+      <div className={`flex flex-col md:flex-row gap-3 sticky top-[70px] pt-2 ${showToolsMenu ? 'z-[70]' : 'z-30'}`}>
          <div className={`w-full md:flex-1 flex flex-col gap-2`}>
             <div className={`flex items-center px-4 py-3 rounded-xl shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 ${cardColor}`}>
                 <Search className="text-gray-400 mr-3" size={18} />
@@ -95,13 +97,36 @@ export default function InputTab({
                  <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`p-3 rounded-xl transition active:scale-95 shadow-lg ${showToolsMenu ? 'bg-blue-700 text-white shadow-blue-600/30' : 'bg-blue-600 text-white shadow-blue-500/30'} hover:bg-blue-700`}>{showToolsMenu ? <X size={20} /> : <Grid size={20} />}</button>
                   {showToolsMenu && (
                       <>
-                          <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" onClick={() => setShowToolsMenu(false)}></div>
-                          <div className="absolute right-0 top-full mt-2 w-64 sm:w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 p-4 animate-in fade-in slide-in-from-top-2 origin-top-right">
-                              <div className="grid grid-cols-2 gap-3">
-                                  <button onClick={() => { handleAddKPM(); setShowToolsMenu(false); }} className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition border border-transparent hover:border-gray-200 dark:hover:border-gray-600"><div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Plus size={20} /></div><span className="text-xs font-bold dark:text-white">Tambah KPM</span></button>
-                                  <button onClick={() => { handleMarkAllPresent(); setShowToolsMenu(false); }} className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition border border-transparent hover:border-gray-200 dark:hover:border-gray-600"><div className="p-2 bg-green-100 text-green-600 rounded-lg"><CheckSquare size={20} /></div><span className="text-xs font-bold dark:text-white">Hadir Semua</span></button>
-                                  <button onClick={() => { handleArchiveSession(); setShowToolsMenu(false); }} className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition border border-transparent hover:border-gray-200 dark:hover:border-gray-600"><div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><Archive size={20} /></div><span className="text-xs font-bold dark:text-white">Selesai & Reset</span></button>
-                                  <button onClick={() => { handleDeleteAllData(); setShowToolsMenu(false); }} className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition border border-transparent hover:border-gray-200 dark:hover:border-gray-600"><div className="p-2 bg-red-100 text-red-600 rounded-lg"><Trash2 size={20} /></div><span className="text-xs font-bold dark:text-white text-red-500">Hapus Semua</span></button>
+                          <div className="fixed inset-0 z-[1] bg-black/30 backdrop-blur-[2px] animate-in fade-in duration-200" onClick={() => setShowToolsMenu(false)}></div>
+                          <div className="fixed left-3 right-3 bottom-6 sm:bottom-auto sm:left-auto sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 z-[2] p-2 animate-in fade-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:slide-in-from-top-2 duration-200 origin-top-right max-h-[70vh] overflow-y-auto custom-scrollbar pb-safe">
+                              <p className="px-3 pt-2 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Sesi Pertemuan</p>
+                              <button onClick={() => { handleAddKPM(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
+                                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"><Plus size={18} /></div>
+                                  <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Tambah KPM</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Buat data KPM baru</p></div>
+                              </button>
+                              <button onClick={() => { handleMarkAllPresent(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
+                                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"><CheckSquare size={18} /></div>
+                                  <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Hadir Semua</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Tandai semua KPM hadir</p></div>
+                              </button>
+                              <button onClick={() => { handleArchiveSession(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
+                                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"><Archive size={18} /></div>
+                                  <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Selesai & Reset</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Arsipkan sesi ke Riwayat</p></div>
+                              </button>
+                              <p className="px-3 pt-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700 mt-2">Data</p>
+                              <button onClick={() => { handleBackupData(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
+                                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400"><Download size={18} /></div>
+                                  <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Backup Data</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Unduh cadangan (JSON)</p></div>
+                              </button>
+                              <label className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left cursor-pointer">
+                                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-teal-50 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400"><Upload size={18} /></div>
+                                  <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Pulihkan Data</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Impor file backup</p></div>
+                                  <input type="file" accept=".json,application/json" className="hidden" onChange={(e) => { handleRestoreFile(e); setShowToolsMenu(false); }} />
+                              </label>
+                              <div className="border-t border-gray-100 dark:border-gray-700 mt-2 pt-2">
+                                  <button onClick={() => { handleDeleteAllData(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98] transition text-left">
+                                      <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"><Trash2 size={18} /></div>
+                                      <div className="min-w-0"><p className="text-sm font-bold text-red-600 dark:text-red-400 leading-tight">Hapus Semua Data</p><p className="text-[11px] text-red-400/70 dark:text-red-500/60">Tidak bisa dibatalkan</p></div>
+                                  </button>
                               </div>
                           </div>
                       </>
@@ -225,10 +250,13 @@ export default function InputTab({
           
           {visibleCount < filteredData.length && <div ref={mobileLoadMoreRef} className="py-6 flex justify-center col-span-full"><Loader2 className="animate-spin text-gray-400"/></div>}
           {filteredData.length === 0 && (
-              <div className="text-center py-10 opacity-50 col-span-full">
-                  <div className="bg-gray-100 dark:bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3"><Users size={24}/></div>
-                  <p>Belum ada data KPM.</p>
-                  <p className="text-xs">Import CSV atau Tambah Manual.</p>
+              <div className="col-span-full">
+                  <EmptyState
+                      title={searchTerm ? "Tidak Ada Hasil" : "Belum Ada Data KPM"}
+                      description={searchTerm ? `Tidak ditemukan KPM dengan kata kunci "${searchTerm}".` : "Import file CSV dari menu Pengaturan,\natau tambahkan data KPM secara manual."}
+                      icons={searchTerm ? [Search] : [Upload, Users, Plus]}
+                      action={searchTerm ? undefined : { label: "+ Tambah KPM Manual", onClick: handleAddKPM }}
+                  />
               </div>
           )}
       </div>

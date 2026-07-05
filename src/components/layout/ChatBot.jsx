@@ -84,7 +84,7 @@ Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. J
       const errorMsg = {
         id: Date.now() + 1,
         sender: 'bot',
-        text: 'Maaf, terjadi kesalahan saat menghubungi layanan AI. Pastikan koneksi internet Anda aktif.',
+        text: `⚠️ ${error.message || 'Maaf, terjadi kesalahan saat menghubungi layanan AI.'}`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -98,6 +98,28 @@ Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. J
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // Render markdown ringan dari jawaban AI: **tebal** dan daftar berpoin
+  const renderInline = (text) => {
+    const parts = text.split(/\*\*(.+?)\*\*/g);
+    return parts.map((part, i) => (i % 2 === 1 ? <strong key={i} className="font-bold">{part}</strong> : part));
+  };
+
+  const renderMessageText = (text) => {
+    return text.split('\n').map((line, i) => {
+      const bullet = line.match(/^\s*[*-]\s+(.*)/);
+      if (bullet) {
+        return (
+          <p key={i} className="flex gap-1.5 mt-1">
+            <span className="shrink-0 mt-[5px] w-1 h-1 rounded-full bg-current opacity-60" />
+            <span>{renderInline(bullet[1])}</span>
+          </p>
+        );
+      }
+      if (line.trim() === '') return null;
+      return <p key={i} className={i > 0 ? 'mt-1.5' : ''}>{renderInline(line)}</p>;
+    });
   };
 
   return (
@@ -157,9 +179,7 @@ Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. J
                 </div>
                 <div>
                   <div className={`p-3 rounded-2xl text-xs leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-800 rounded-tl-none'}`}>
-                    {msg.text.split('\n').map((para, i) => (
-                      <p key={i} className={i > 0 ? 'mt-1.5' : ''}>{para}</p>
-                    ))}
+                    {renderMessageText(msg.text)}
                   </div>
                   <span className={`block text-[9px] text-gray-400 dark:text-gray-500 mt-1 ${msg.sender === 'user' ? 'text-right' : ''}`}>
                     {msg.time}
@@ -172,9 +192,10 @@ Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. J
                 <div className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-white bg-blue-600">
                   <Bot size={16} />
                 </div>
-                <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-800 p-3 rounded-2xl rounded-tl-none text-xs text-gray-500 flex items-center gap-2">
-                  <Loader2 size={14} className="animate-spin text-blue-600" />
-                  <span>Sedang mengetik...</span>
+                <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-800 px-4 py-3 rounded-2xl rounded-tl-none flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
             )}

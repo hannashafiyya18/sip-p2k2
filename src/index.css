@@ -1,3 +1,52 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  button, [role="button"], a, label, select {
+    touch-action: manipulation;
+  }
+
+  /* Fokus keyboard yang jelas tanpa mengganggu klik mouse */
+  :focus-visible {
+    outline: 2px solid theme('colors.blue.500');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Angka rata (tabular) untuk statistik & nominal uang agar tidak "goyang" */
+  .tabular-nums, h2, h3 {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Sembunyikan scrollbar (dipakai slider kartu statistik) */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Scrollbar tipis untuk panel internal */
+  .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: theme('colors.gray.300'); border-radius: 999px; }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: theme('colors.gray.700'); }
+
+  /* Ruang aman bawah untuk iPhone/Android gesture bar (PWA) */
+  .pb-safe { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+}
+
+/* Hormati preferensi pengguna yang mematikan animasi */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

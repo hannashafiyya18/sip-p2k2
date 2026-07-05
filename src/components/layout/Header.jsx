@@ -15,10 +15,10 @@ export default function Header({
   user, handleLogin, handleLogout
 }) {
   return (
-    <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 py-3">
+    <header className="sticky top-0 z-40 bg-white/75 dark:bg-gray-900/75 backdrop-blur-xl border-b border-gray-200/70 dark:border-gray-800 px-4 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
-           <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md">
+           <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/25 ring-1 ring-white/20">
               <FileText size={20} strokeWidth={2.5} />
            </div>
            <div>
@@ -57,7 +57,7 @@ export default function Header({
               <Upload size={18} />
               <input ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
            </label>
-           <button onClick={() => setShowViewMenu(!showViewMenu)} className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">
+           <button onClick={() => setShowViewMenu(!showViewMenu)} aria-label="Pengaturan tampilan" className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-90 transition">
               <Settings size={18} />
            </button>
            
@@ -105,9 +105,9 @@ export default function Header({
            )}
 
            {user ? (
-               <button onClick={handleLogout} className="p-2.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 transition"><LogOut size={18} /></button>
+               <button onClick={handleLogout} aria-label="Keluar" className="p-2.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-90 transition"><LogOut size={18} /></button>
            ) : (
-              <button onClick={handleLogin} className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition">Login</button>
+              <button onClick={handleLogin} className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 active:scale-95 shadow-lg shadow-blue-600/25 transition">Login</button>
            )}
         </div>
       </div>

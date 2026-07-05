@@ -1,9 +1,15 @@
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "REDACTED_LEAKED_API_KEY";
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 export const callGemini = async (prompt) => {
   const models = [
     "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
   ];
+
+  const statuses = new Set();
+  let lastStatus = null;
+  let isNetworkError = false;
 
   for (const model of models) {
     try {
@@ -24,15 +30,27 @@ export const callGemini = async (prompt) => {
         }
       );
 
-      if (!response.ok) continue;
+      if (!response.ok) { lastStatus = response.status; statuses.add(response.status); continue; }
 
       const data = await response.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch (error) {
+      isNetworkError = true;
       console.error(`Error with ${model}:`, error);
     }
   }
-  throw new Error("Gagal menghubungi AI service.");
+
+  const err = new Error(
+    isNetworkError && !lastStatus
+      ? "Tidak dapat terhubung ke server AI. Periksa koneksi internet Anda."
+      : statuses.has(403) || statuses.has(400)
+      ? "API Key Gemini tidak valid atau aksesnya diblokir. Ganti API Key Gemini Anda."
+      : statuses.has(429)
+      ? "Kuota AI habis untuk saat ini. Coba lagi nanti atau tingkatkan paket API Gemini Anda."
+      : "Layanan AI sedang bermasalah. Silakan coba beberapa saat lagi."
+  );
+  err.status = lastStatus;
+  throw err;
 };
 
 /**
