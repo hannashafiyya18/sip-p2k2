@@ -116,7 +116,7 @@ export default function App() {
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => { e.preventDefault(); setDeferredPrompt(e); setIsInstallable(true); };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').then(() => console.log('SW registered'), (err) => console.log('SW failed', err)); }); }
+    if (import.meta.env.PROD && 'serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').then(() => console.log('SW registered'), (err) => console.log('SW failed', err)); }); }
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
