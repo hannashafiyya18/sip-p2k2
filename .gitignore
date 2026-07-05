@@ -31,3 +31,6 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Repomix dump bisa berisi seluruh isi source (rawan bocor secret)
+repomix-output.xml
