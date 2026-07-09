@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, ChevronDown, Loader2, Eye, Download, FileBadge, Filter, History, Pencil, Trash2, Archive } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
+import { useReveal } from '../../hooks/useReveal';
 
 export default function HistoryTab({
   isLaporanBulananOpen, setIsLaporanBulananOpen, setShowBulananMonthModal,
@@ -13,6 +14,7 @@ export default function HistoryTab({
   historyFilterMonth, setHistoryFilterMonth, textColor, cardColor,
   handleEditHistory, handleDeleteHistory
 }) {
+  const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -114,9 +116,9 @@ export default function HistoryTab({
                 icons={[Filter, History, Archive]}
             />
         ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredHistory.map(h => (
-                <div key={h.id} className={`p-5 rounded-2xl ${cardColor} shadow-sm border-l-4 border-l-blue-500 relative group animate-in zoom-in-95 flex flex-col justify-between`}>
+                <div key={h.id} className={`p-5 rounded-2xl ${cardColor} shadow-sm border-l-4 border-l-blue-500 relative group transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg flex flex-col justify-between`}>
                     <div>
                         <div className="flex justify-between items-start mb-3">
                             <div><div className="text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md inline-block mb-2">{h.date}</div><h3 className={`font-bold text-base ${textColor}`}>{h.groupName}</h3></div>

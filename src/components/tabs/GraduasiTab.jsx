@@ -1,12 +1,14 @@
 import React from 'react';
 import { GraduationCap, X, CheckCheck, RotateCcw, Loader2, FileText, Award, Sparkles } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
+import { useReveal } from '../../hooks/useReveal';
 
 export default function GraduasiTab({
   cardColor, textColor, filteredGraduationData,
   handleCancelGraduation, handleUpdateGraduationStatus,
   generateGraduationLetter, isGeneratingPDF
 }) {
+  const listRef = useReveal({ deps: [filteredGraduationData.length], stagger: 0.05, y: 16 });
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
         <div className={`p-6 rounded-2xl ${cardColor} shadow-sm text-center mb-6`}>
@@ -22,9 +24,9 @@ export default function GraduasiTab({
                 icons={[Award, GraduationCap, Sparkles]}
             />
         ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredGraduationData.map(item => (
-                    <div key={item.id} className={`p-5 rounded-2xl border relative overflow-hidden transition-all ${item.graduationStatus === 'ready' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700'}`}>
+                    <div key={item.id} className={`p-5 rounded-2xl border relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${item.graduationStatus === 'ready' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800 hover:shadow-emerald-500/10' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700'}`}>
                         <div className="flex justify-between items-start mb-3 relative z-10">
                             <div>
                                 <div className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider inline-block mb-2 ${item.graduationStatus === 'ready' ? 'bg-emerald-200 text-emerald-800' : 'bg-yellow-100 text-yellow-700'}`}>

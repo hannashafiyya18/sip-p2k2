@@ -8,6 +8,8 @@ import {
 import { PKH_MODULES, UNDERSTANDING_LEVELS } from '../../utils/constants';
 import { formatRupiah, calculateTotalAid } from '../../utils/helpers';
 import EmptyState from '../ui/EmptyState';
+import CountUp from '../ui/CountUp';
+import { useReveal } from '../../hooks/useReveal';
 
 export default function InputTab({
   scrollContainerRef, handleScroll, cardColor, subText, stats, currentSlide,
@@ -23,6 +25,7 @@ export default function InputTab({
   openNoteModal, openEditModal, handleProposeGraduation, handleDeleteKPM,
   visibleCount, filteredData, mobileLoadMoreRef
 }) {
+  const listRef = useReveal({ deps: [selectedGroup], stagger: 0.04, y: 14, max: 12 });
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
       
@@ -35,14 +38,14 @@ export default function InputTab({
                           <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle size={80} /></div>
                           <p className={`text-xs font-bold uppercase tracking-wider ${subText}`}>Kehadiran</p>
                           <div>
-                              <div className="flex items-end gap-2 mt-1"><span className="text-3xl font-bold text-green-600">{stats.present}</span><span className="text-xs text-gray-400 mb-1.5">/ {stats.total}</span></div>
+                              <div className="flex items-end gap-2 mt-1"><CountUp value={stats.present} className="text-3xl font-bold text-green-600 tabular-nums" /><span className="text-xs text-gray-400 mb-1.5">/ {stats.total}</span></div>
                               <div className="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full mt-2 overflow-hidden"><div className="bg-green-500 h-full rounded-full transition-all duration-500" style={{ width: `${stats.total ? (stats.present/stats.total)*100 : 0}%` }}></div></div>
                           </div>
                        </div>
                        <div className={`p-5 rounded-2xl ${cardColor} shadow-sm relative overflow-hidden group h-32 flex flex-col justify-between`}>
                           <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><XCircle size={80} /></div>
                           <p className={`text-xs font-bold uppercase tracking-wider ${subText}`}>Absen</p>
-                          <div className="flex items-end gap-2 mt-1"><span className="text-3xl font-bold text-red-500">{stats.absent}</span><span className="text-xs text-gray-400 mb-1.5">Orang</span></div>
+                          <div className="flex items-end gap-2 mt-1"><CountUp value={stats.absent} className="text-3xl font-bold text-red-500 tabular-nums" /><span className="text-xs text-gray-400 mb-1.5">Orang</span></div>
                        </div>
                   </div>
               </div>
@@ -51,7 +54,7 @@ export default function InputTab({
                       <div className="absolute right-0 top-0 p-4 opacity-10 text-yellow-600 dark:text-yellow-500"><Wallet size={100} /></div>
                       <div className="relative z-10">
                           <p className="text-xs font-bold uppercase tracking-wider text-yellow-600 dark:text-yellow-500 flex items-center gap-2"><Banknote size={14}/> Total Estimasi Dana</p>
-                          <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1 tracking-tight">{formatRupiah(stats.totalAid)}</h2>
+                          <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1 tracking-tight tabular-nums"><CountUp value={stats.totalAid} format={formatRupiah} duration={0.9} /></h2>
                           <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">*Estimasi untuk {stats.total} KPM{stats.total > 0 && <> &bull; rata-rata <span className="font-bold">{formatRupiah(Math.round(stats.totalAid / stats.total))}</span>/KPM</>}</p>
                       </div>
                   </div>
@@ -61,16 +64,16 @@ export default function InputTab({
                         <div className="absolute right-0 top-0 p-4 opacity-5"><PieChart size={80} /></div>
                         <div className="flex items-center justify-between mb-2">
                             <p className={`text-xs font-bold uppercase tracking-wider ${subText} flex items-center gap-2`}><Activity size={14}/> Statistik Komponen</p>
-                            <span className="text-xs font-extrabold bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-200">Total: {stats.totalComponents}</span>
+                            <span className="text-xs font-extrabold bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-200">Total: <CountUp value={stats.totalComponents} className="tabular-nums" /></span>
                         </div>
                         <div className="grid grid-cols-4 gap-2 flex-1 overflow-y-auto custom-scrollbar">
-                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><span className="block text-lg font-bold text-blue-600 dark:text-blue-400 leading-none">{stats.componentsCount.sd}</span><span className="text-[9px] text-gray-500">SD</span></div>
-                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><span className="block text-lg font-bold text-indigo-600 dark:text-indigo-400 leading-none">{stats.componentsCount.smp}</span><span className="text-[9px] text-gray-500">SMP</span></div>
-                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><span className="block text-lg font-bold text-violet-600 dark:text-violet-400 leading-none">{stats.componentsCount.sma}</span><span className="text-[9px] text-gray-500">SMA</span></div>
-                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><span className="block text-lg font-bold text-emerald-600 dark:text-emerald-400 leading-none">{stats.componentsCount.lansia}</span><span className="text-[9px] text-gray-500">Lansia</span></div>
-                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><span className="block text-lg font-bold text-rose-600 dark:text-rose-400 leading-none">{stats.componentsCount.balita}</span><span className="text-[9px] text-gray-500">Balita</span></div>
-                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><span className="block text-lg font-bold text-pink-600 dark:text-pink-400 leading-none">{stats.componentsCount.hamil}</span><span className="text-[9px] text-gray-500">Bumil</span></div>
-                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700 col-span-2 flex items-center justify-between px-3"><span className="text-[9px] text-gray-500">Disabilitas</span><span className="block text-lg font-bold text-purple-600 dark:text-purple-400 leading-none">{stats.componentsCount.disabilitas}</span></div>
+                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><CountUp value={stats.componentsCount.sd} className="block text-lg font-bold text-blue-600 dark:text-blue-400 leading-none tabular-nums" /><span className="text-[9px] text-gray-500">SD</span></div>
+                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><CountUp value={stats.componentsCount.smp} className="block text-lg font-bold text-indigo-600 dark:text-indigo-400 leading-none tabular-nums" /><span className="text-[9px] text-gray-500">SMP</span></div>
+                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><CountUp value={stats.componentsCount.sma} className="block text-lg font-bold text-violet-600 dark:text-violet-400 leading-none tabular-nums" /><span className="text-[9px] text-gray-500">SMA</span></div>
+                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><CountUp value={stats.componentsCount.lansia} className="block text-lg font-bold text-emerald-600 dark:text-emerald-400 leading-none tabular-nums" /><span className="text-[9px] text-gray-500">Lansia</span></div>
+                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><CountUp value={stats.componentsCount.balita} className="block text-lg font-bold text-rose-600 dark:text-rose-400 leading-none tabular-nums" /><span className="text-[9px] text-gray-500">Balita</span></div>
+                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700"><CountUp value={stats.componentsCount.hamil} className="block text-lg font-bold text-pink-600 dark:text-pink-400 leading-none tabular-nums" /><span className="text-[9px] text-gray-500">Bumil</span></div>
+                            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg text-center border border-gray-100 dark:border-gray-700 col-span-2 flex items-center justify-between px-3"><span className="text-[9px] text-gray-500">Disabilitas</span><CountUp value={stats.componentsCount.disabilitas} className="block text-lg font-bold text-purple-600 dark:text-purple-400 leading-none tabular-nums" /></div>
                         </div>
                   </div>
               </div>
@@ -198,9 +201,9 @@ export default function InputTab({
       )}
 
       {/* LIST DATA KPM */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div ref={listRef} className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {paginatedData.map(item => (
-             <div key={item.id} className={`group relative rounded-2xl ${cardPadding} transition-all duration-300 border ${item.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30' : `${cardColor} hover:shadow-md`}`}>
+             <div key={item.id} className={`group relative rounded-2xl ${cardPadding} transition-all duration-300 border hover:-translate-y-0.5 ${item.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30 hover:shadow-lg hover:shadow-green-500/10' : `${cardColor} hover:shadow-lg`}`}>
                 <div className={`flex items-start ${cardGap}`}>
                    <button onClick={(e) => { e.stopPropagation(); handleStatusChange(item); }} className={`shrink-0 ${isCompact ? 'w-8 h-8 rounded-lg' : 'w-12 h-12 rounded-xl'} flex items-center justify-center transition-all duration-300 ${item.presence ? 'bg-green-500 text-white shadow-lg shadow-green-500/40 rotate-0' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-gray-200 rotate-0'}`}>
                        {item.presence ? <Check strokeWidth={3} size={isCompact ? 16 : 20} /> : <span className={`${isCompact ? 'text-[10px]' : 'text-xs'} font-bold`}>{item.name.charAt(0)}</span>}

@@ -1,11 +1,13 @@
 import React from 'react';
 import { ChevronDown, StickyNote, Edit2, Trash2, PenLine, BookOpen } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
+import { useReveal } from '../../hooks/useReveal';
 
 export default function JurnalTab({
   cardColor, textColor, selectedGroupJurnal, setShowGroupFilter,
   filteredJurnalData, openNoteModal, deleteNote
 }) {
+  const listRef = useReveal({ deps: [selectedGroupJurnal, filteredJurnalData.length], stagger: 0.05, y: 16 });
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
         <div className="flex gap-3">
@@ -21,9 +23,9 @@ export default function JurnalTab({
                 icons={[PenLine, StickyNote, BookOpen]}
             />
         ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredJurnalData.map(item => (
-                    <div key={item.id} className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/30 p-5 rounded-2xl relative">
+                    <div key={item.id} className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/30 p-5 rounded-2xl relative transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-500/10">
                         <div className="flex justify-between items-start mb-2">
                             <h3 className="font-bold text-gray-900 dark:text-yellow-100">{item.name}</h3>
                             <div className="flex gap-2">
