@@ -1,11 +1,20 @@
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
-export const callGemini = async (prompt) => {
+/**
+ * @param {string} prompt
+ * @param {Array<{mimeType: string, data: string}>} [images] gambar (base64 tanpa prefix data URL) untuk permintaan multimodal
+ */
+export const callGemini = async (prompt, images = []) => {
   const models = [
     "gemini-3.5-flash",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
   ];
+
+  const parts = [{ text: prompt }];
+  for (const img of images) {
+    if (img && img.data) parts.push({ inline_data: { mime_type: img.mimeType || 'image/jpeg', data: img.data } });
+  }
 
   const statuses = new Set();
   let lastStatus = null;
@@ -19,7 +28,7 @@ export const callGemini = async (prompt) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
+            contents: [{ parts }],
             safetySettings: [
               { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
               { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },

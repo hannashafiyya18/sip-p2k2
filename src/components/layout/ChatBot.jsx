@@ -1,22 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2, Sparkles, Bot, User, Minimize2 } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Sparkles, Bot, User, Minimize2, Mic } from 'lucide-react';
 import { callGemini } from '../../services/ai';
 import { formatRupiah } from '../../utils/helpers';
 
-export default function ChatBot({ stats, dynamicGroups }) {
+export default function ChatBot({ stats, dynamicGroups, onAgentCommand }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
       id: 1,
       sender: 'bot',
-      text: 'Halo! Saya Asisten AI SIP-P2K2. Ada yang bisa saya bantu hari ini seputar data KPM atau panduan pertemuan kelompok PKH?',
+      text: 'Halo! Saya Asisten AI SIP-P2K2. Anda bisa **bertanya** soal data KPM, atau memberi **perintah suara**.\n\nContoh absensi: "Di kelompok Rajek Depok, KPM atas nama Anisa tidak hadir" lalu ucapkan "simpan".\nContoh tambah KPM: "Tambah KPM baru nama Siti Aminah kelompok Rajek Depok, komponen 2 SD 1 balita".',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(true);
+
   const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const handleSendRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,12 +32,47 @@ export default function ChatBot({ stats, dynamicGroups }) {
     }
   }, [messages, isOpen]);
 
+  // Setup pengenalan suara (Web Speech API) — sekali saja
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setVoiceSupported(false); return; }
+    const rec = new SR();
+    rec.lang = 'id-ID';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      setIsListening(false);
+      if (transcript && transcript.trim()) handleSendRef.current?.(transcript.trim());
+    };
+    rec.onerror = () => setIsListening(false);
+    rec.onend = () => setIsListening(false);
+    recognitionRef.current = rec;
+    return () => { try { rec.abort(); } catch { /* ignore */ } };
+  }, []);
+
+  const toggleVoice = () => {
+    const rec = recognitionRef.current;
+    if (!rec || isLoading) return;
+    if (isListening) { try { rec.stop(); } catch { /* ignore */ } setIsListening(false); return; }
+    try { rec.start(); setIsListening(true); } catch { setIsListening(false); }
+  };
+
   const quickSuggestions = [
+    { label: '🎤 Cara Perintah Suara', text: 'Bagaimana cara memakai perintah suara untuk absensi?' },
     { label: '📊 Ringkasan KPM', text: 'Tolong berikan ringkasan data KPM kita saat ini' },
     { label: '💰 Rincian Bantuan', text: 'Berapa estimasi total dana bantuan dan rinciannya?' },
-    { label: '👥 Daftar Kelompok', text: 'Apa saja kelompok KPM yang terdaftar?' },
     { label: '💡 Panduan PKH', text: 'Apa itu P2K2 dalam PKH?' }
   ];
+
+  const pushBotMessage = (text) => {
+    setMessages(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      sender: 'bot',
+      text,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }]);
+  };
 
   const handleSendMessage = async (textToSend) => {
     const text = textToSend || inputMessage;
@@ -52,6 +91,17 @@ export default function ChatBot({ stats, dynamicGroups }) {
     setIsLoading(true);
 
     try {
+      // 1. Coba jalankan sebagai PERINTAH AGENT (absensi/simpan/pilih kelompok, dll.)
+      if (onAgentCommand) {
+        const result = await onAgentCommand(text);
+        if (result && result.message) {
+          pushBotMessage(result.message);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // 2. Jika bukan perintah, proses sebagai obrolan biasa dengan konteks data
       // Craft the system prompt with context
       const cleanGroups = dynamicGroups ? dynamicGroups.filter(g => g !== "Semua Kelompok") : [];
       const systemPrompt = `Anda adalah Asisten AI SIP-P2K2 (Sistem Informasi Pertemuan Peningkatan Kemampuan Keluarga). Anda adalah asisten pintar untuk pendamping sosial Program Keluarga Harapan (PKH).
@@ -64,6 +114,12 @@ Berikut ringkasan data KPM aktif saat ini di aplikasi pengguna:
 - Estimasi Total Dana Bantuan: ${formatRupiah(stats?.totalAid || 0)}
 - Daftar Kelompok: ${cleanGroups.join(', ') || 'Belum ada kelompok'}
 - Rincian Komponen Bantuan: SD (${stats?.componentsCount?.sd || 0}), SMP (${stats?.componentsCount?.smp || 0}), SMA (${stats?.componentsCount?.sma || 0}), Lansia (${stats?.componentsCount?.lansia || 0}), Balita (${stats?.componentsCount?.balita || 0}), Bumil (${stats?.componentsCount?.hamil || 0}), Disabilitas (${stats?.componentsCount?.disabilitas || 0})
+
+Aplikasi ini juga punya PERINTAH SUARA/TEKS (agen AI). Jika pengguna bertanya cara memakainya, jelaskan bahwa mereka bisa menekan tombol mikrofon lalu mengucapkan perintah seperti:
+- Absensi: "Di kelompok Rajek Depok, KPM atas nama Anisa tidak hadir" (KPM lain bisa disebut, atau "yang lain hadir semua").
+- Tandai semua: "Hadirkan semua" / "Kosongkan semua ceklis".
+- Tambah KPM baru: "Tambah KPM baru nama Siti Aminah kelompok Rajek Depok, komponen 2 SD 1 balita, BPNT ya".
+- Pilih kelompok / ubah tanggal, dan "Simpan" untuk mengarsipkan sesi ke Riwayat.
 
 Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. Jika ditanya mengenai data KPM, gunakan data ringkasan di atas untuk menjawab secara detail dan informatif. Jika data tidak tersedia atau pertanyaan terlalu spesifik tentang nama orang tertentu yang tidak ada di ringkasan, jelaskan dengan ramah bahwa Anda hanya memiliki akses ke ringkasan statistik saat ini di database lokal pendamping.`;
 
@@ -92,6 +148,9 @@ Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. J
       setIsLoading(false);
     }
   };
+
+  // Selalu tunjuk ke handler terbaru agar callback pengenalan suara tidak basi
+  handleSendRef.current = handleSendMessage;
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -153,7 +212,7 @@ Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. J
                 <h3 className="font-bold text-sm leading-tight flex items-center gap-1">
                   Asisten AI SIP-P2K2 <Sparkles size={12} className="text-yellow-300 fill-yellow-300" />
                 </h3>
-                <p className="text-[10px] opacity-75">Tanya ringkasan data & info PKH</p>
+                <p className="text-[10px] opacity-75">Tanya data & perintah suara absensi</p>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -220,21 +279,42 @@ Jawablah dengan bahasa Indonesia yang santun, profesional, ramah, dan ringkas. J
             </div>
           )}
 
+          {/* INDIKATOR MENDENGARKAN */}
+          {isListening && (
+            <div className="px-3 py-2 bg-red-50 dark:bg-red-900/20 border-t border-red-100 dark:border-red-900/40 flex items-center justify-center gap-2 shrink-0">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+              </span>
+              <span className="text-[11px] font-bold text-red-600 dark:text-red-400">Mendengarkan… silakan bicara</span>
+            </div>
+          )}
+
           {/* INPUT FORM */}
           <div className="p-3 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex items-center gap-2 shrink-0">
+            {voiceSupported && (
+              <button
+                onClick={toggleVoice}
+                disabled={isLoading}
+                className={`p-2.5 rounded-xl transition shrink-0 ${isListening ? 'bg-red-500 text-white shadow-md animate-pulse' : 'bg-gray-100 dark:bg-gray-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-700'} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={isListening ? 'Berhenti mendengarkan' : 'Perintah suara / dikte'}
+              >
+                <Mic size={16} />
+              </button>
+            )}
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isLoading}
-              placeholder="Tulis pesan ke Asisten AI..."
-              className="flex-1 text-xs p-2.5 bg-gray-50 dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-500"
+              placeholder={isListening ? 'Mendengarkan suara Anda…' : 'Tulis pesan atau perintah…'}
+              className="flex-1 min-w-0 text-xs p-2.5 bg-gray-50 dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-500"
             />
             <button
               onClick={() => handleSendMessage()}
               disabled={!inputMessage.trim() || isLoading}
-              className={`p-2.5 rounded-xl transition ${inputMessage.trim() && !isLoading ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'}`}
+              className={`p-2.5 rounded-xl transition shrink-0 ${inputMessage.trim() && !isLoading ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'}`}
               title="Kirim Pesan"
             >
               <Send size={14} />

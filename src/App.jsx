@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { 
-  CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw, 
+import {
+  CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw,
   History, CheckCheck, Save, Search, Check, Minus, AlertTriangle,
-  Camera, Image as ImageIcon, HelpCircle
+  Camera, Image as ImageIcon, HelpCircle, ScanLine
 } from 'lucide-react';
 
 // --- IMPORT FIREBASE ---
@@ -26,6 +26,7 @@ import ChatBot from './components/layout/ChatBot';
 
 // --- IMPORT AI SERVICES ---
 // import { generateJournalSummary, predictGraduation, parseAisearchQuery } from './services/ai';
+import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData } from './services/aiAgent';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -67,7 +68,8 @@ export default function App() {
   const [selectedModule, setSelectedModule] = useState("");
   const [visibleCount, setVisibleCount] = useState(50); 
   const [isCompressing, setIsCompressing] = useState(false);
-  const [currentSlide, setCurrentSlide] = useState(0); 
+  const [isScanning, setIsScanning] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
   
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [semesterYear, setSemesterYear] = useState(new Date().getFullYear());
@@ -100,8 +102,9 @@ export default function App() {
   const [isInstallable, setIsInstallable] = useState(false);
 
   // REFS
-  const mobileLoadMoreRef = useRef(null); 
+  const mobileLoadMoreRef = useRef(null);
   const fileInputRef = useRef(null);
+  const ktpInputRef = useRef(null);
   const scrollContainerRef = useRef(null); 
   const prevSelectedGroupRef = useRef(selectedGroup);
   
@@ -270,6 +273,42 @@ export default function App() {
     showToast(editModal.isNew ? "KPM baru berhasil ditambahkan" : "Data berhasil diperbarui");
   };
   const handleEditChange = (field, value) => setEditModal(prev => ({ ...prev, data: { ...prev.data, [field]: value } }));
+
+  // Scan KTP/KK -> OCR -> isi field form yang masih kosong
+  const handleScanKtp = async (e) => {
+    const file = e.target.files[0];
+    if (ktpInputRef.current) ktpInputRef.current.value = "";
+    if (!file) return;
+    setIsScanning(true);
+    try {
+      const dataUrl = await compressImage(file);
+      const ocr = await extractKtpData(dataUrl);
+      if (!ocr || (!ocr.name && !ocr.nik && !ocr.noKK)) {
+        showAlert("Tidak Terbaca", "Data pada foto tidak terbaca jelas. Coba foto ulang dengan pencahayaan lebih baik dan dokumen tegak/tidak buram.");
+        return;
+      }
+      // Hanya isi field yang masih kosong agar tidak menimpa input manual pengguna
+      setEditModal(prev => {
+        if (!prev.data) return prev;
+        const d = { ...prev.data };
+        const fill = (key, val) => { if (val && (!d[key] || String(d[key]).trim() === "")) d[key] = String(val).trim(); };
+        fill('name', ocr.name);
+        fill('nik', ocr.nik);
+        fill('noKK', ocr.noKK);
+        fill('address', ocr.address);
+        fill('desa', ocr.desa);
+        fill('kecamatan', ocr.kecamatan);
+        fill('kabupaten', ocr.kabupaten);
+        fill('provinsi', ocr.provinsi);
+        return { ...prev, data: d };
+      });
+      showToast(`Data ${ocr.docType === 'KK' ? 'Kartu Keluarga' : 'KTP'} terbaca — mohon periksa kembali`);
+    } catch (err) {
+      showAlert("Scan Gagal", err.message || "Gagal memproses foto dokumen. Periksa koneksi internet Anda.");
+    } finally {
+      setIsScanning(false);
+    }
+  };
   const handleComponentChange = (key, delta) => { setEditModal(prev => { const comps = prev.data.components || {}; const currentVal = comps[key] || 0; const newVal = Math.max(0, currentVal + delta); return { ...prev, data: { ...prev.data, components: { ...comps, [key]: newVal } } }; }); };
 
   const handleMarkAllPresent = () => { 
@@ -400,6 +439,139 @@ export default function App() {
   };
   */
 
+  // --- AI AGENT (DIKTE SUARA / PERINTAH TEKS) ---
+  // Menerima kalimat natural, menerjemahkannya ke perintah, lalu mengeksekusi aksi
+  // pada data kehadiran. Mengembalikan { message } untuk ditampilkan di chat,
+  // atau null agar chatbot memprosesnya sebagai obrolan biasa.
+  const handleAgentCommand = async (text) => {
+    const cleanGroups = dynamicGroups.filter(g => g !== "Semua Kelompok");
+    const todayISO = currentConfig.tanggal || new Date().toISOString().split('T')[0];
+
+    let cmd;
+    try {
+      cmd = await parseAgentCommand(text, { groups: cleanGroups, currentGroup: selectedGroup, todayISO });
+    } catch (e) {
+      return { message: `⚠️ ${e.message || 'Gagal memproses perintah suara.'}` };
+    }
+    if (!cmd || cmd.intent === 'chat') return null; // biarkan chatbot menjawab biasa
+
+    // Tentukan kelompok target
+    let targetGroup = selectedGroup;
+    if (cmd.group) {
+      const mg = matchGroup(cmd.group, cleanGroups);
+      if (mg) { targetGroup = mg; setSelectedGroup(mg); }
+      else targetGroup = cmd.group;
+    }
+
+    // Tentukan tanggal target
+    const targetDate = cmd.date || currentConfig.tanggal;
+    if (cmd.date) handleConfigChange('tanggal', cmd.date);
+
+    const groupList = targetGroup === "Semua Kelompok" ? data : data.filter(d => d.group === targetGroup);
+
+    switch (cmd.intent) {
+      case 'select_group': {
+        if (!cleanGroups.includes(targetGroup)) return { message: `⚠️ Kelompok "${cmd.group}" tidak ditemukan. Kelompok tersedia: ${cleanGroups.join(', ') || '-'}.` };
+        return { message: `✅ Kelompok **${targetGroup}** dipilih (${groupList.length} KPM).` };
+      }
+
+      case 'set_date':
+        return { message: `✅ Tanggal pertemuan diubah menjadi **${targetDate}**.` };
+
+      case 'mark_all': {
+        if (groupList.length === 0) return { message: `⚠️ Tidak ada KPM di kelompok "${targetGroup}".` };
+        const presence = cmd.presence !== false;
+        const updates = groupList.filter(k => k.presence !== presence);
+        for (const k of updates) await updateKpmItem({ ...k, presence, understanding: presence ? 'Baik' : '-' });
+        return { message: `✅ ${updates.length} KPM di **${targetGroup}** ditandai **${presence ? 'HADIR' : 'TIDAK HADIR'}**.` };
+      }
+
+      case 'save_session': {
+        if (groupList.length === 0) return { message: `⚠️ Tidak ada data di "${targetGroup}" untuk disimpan.` };
+        const cfg = cmd.date ? { ...currentConfig, tanggal: cmd.date } : currentConfig;
+        await performArchive(groupList, targetGroup, cfg);
+        setActiveTab('history');
+        return { message: `💾 Sesi **${targetGroup}** (${targetDate}) disimpan ke Riwayat dan ceklis kehadiran direset.` };
+      }
+
+      case 'add_kpm': {
+        const k = cmd.kpm || {};
+        const name = (k.name || '').trim();
+        if (!name) return { message: '⚠️ Nama KPM belum tertangkap. Sebutkan minimal nama lengkapnya, contoh: "Tambah KPM baru nama Siti Aminah kelompok Rajek Depok, komponen 2 SD 1 balita".' };
+
+        // Tentukan kelompok KPM: dari perintah, atau kelompok yang sedang dibuka
+        let kpmGroup = cmd.group ? (matchGroup(cmd.group, cleanGroups) || cmd.group.trim()) : (selectedGroup !== 'Semua Kelompok' ? selectedGroup : null);
+        if (!kpmGroup) return { message: `⚠️ Kelompok belum jelas untuk KPM "${name}". Sebutkan kelompoknya, contoh: "...kelompok Rajek Depok".` };
+
+        // Cegah dobel: nama sama persis di kelompok yang sama
+        const dup = data.find(d => d.group === kpmGroup && (d.name || '').trim().toLowerCase() === name.toLowerCase());
+        if (dup) return { message: `⚠️ KPM "${dup.name}" sudah ada di kelompok **${kpmGroup}**, jadi tidak ditambahkan agar tidak dobel. Kalau memang orang berbeda, tambahkan lewat tombol +.` };
+
+        const compLabels = { sd: 'SD', smp: 'SMP', sma: 'SMA', balita: 'Balita', hamil: 'Bumil', disabilitas: 'Disabilitas', lansia: 'Lansia' };
+        const rawComp = k.components || {};
+        const components = {};
+        for (const key of Object.keys(compLabels)) { const v = parseInt(rawComp[key]); if (!isNaN(v) && v > 0) components[key] = v; }
+
+        const newItem = {
+          id: Date.now(), name,
+          nik: (k.nik || '').toString().replace(/\s/g, '').trim(),
+          noKK: (k.noKK || '').toString().replace(/\s/g, '').trim(),
+          bpnt: k.bpnt === true, group: kpmGroup, address: (k.address || '').trim(),
+          components, presence: false, understanding: '-', note: '', graduationStatus: null,
+          desa: '', kecamatan: '', kabupaten: '', provinsi: ''
+        };
+        await updateKpmItem(newItem);
+        setSelectedGroup(kpmGroup);
+
+        const compSummary = Object.keys(components).length ? Object.entries(components).map(([kk, v]) => `${v} ${compLabels[kk]}`).join(', ') : 'belum ada';
+        const details = [
+          `👤 **${name}**`,
+          `🏘️ Kelompok: ${kpmGroup}`,
+          newItem.nik ? `🆔 NIK: ${newItem.nik}` : null,
+          newItem.noKK ? `📄 No. KK: ${newItem.noKK}` : null,
+          newItem.address ? `📍 Alamat: ${newItem.address}` : null,
+          `🧩 Komponen: ${compSummary}`,
+          `🛒 BPNT: ${newItem.bpnt ? 'Ya' : 'Tidak'}`
+        ].filter(Boolean).join('\n');
+        return { message: `✅ KPM baru ditambahkan:\n${details}\n\nSilakan cek di daftar. Kalau NIK/alamat perlu dilengkapi, ketuk kartu KPM untuk mengedit.` };
+      }
+
+      case 'attendance': {
+        if (groupList.length === 0) return { message: `⚠️ Tidak ada KPM di kelompok "${targetGroup}".` };
+        const presence = cmd.presence !== false; // default: hadir, kecuali eksplisit "tidak hadir"
+        const done = [], notFound = [], ambiguous = [];
+        const matchedIds = new Set();
+
+        for (const name of cmd.names) {
+          const res = matchKpmByName(name, groupList);
+          if (res.match) {
+            await updateKpmItem({ ...res.match, presence, understanding: presence ? 'Baik' : '-' });
+            done.push(res.match.name); matchedIds.add(res.match.id);
+          } else if (res.candidates.length) {
+            ambiguous.push(`❓ "${name}" mirip beberapa nama: ${res.candidates.map(c => c.name).join(', ')}. Sebutkan lebih lengkap.`);
+          } else {
+            notFound.push(name);
+          }
+        }
+
+        if (cmd.othersPresence === true || cmd.othersPresence === false) {
+          const others = groupList.filter(k => !matchedIds.has(k.id) && k.presence !== cmd.othersPresence);
+          for (const k of others) await updateKpmItem({ ...k, presence: cmd.othersPresence, understanding: cmd.othersPresence ? 'Baik' : '-' });
+        }
+
+        const parts = [];
+        if (done.length) parts.push(`${presence ? '✅ Ditandai HADIR' : '❌ Ditandai TIDAK HADIR'} di **${targetGroup}**: ${done.join(', ')}`);
+        parts.push(...ambiguous);
+        if (notFound.length) parts.push(`⚠️ Tidak ditemukan: ${notFound.join(', ')}`);
+        if (cmd.othersPresence === true || cmd.othersPresence === false) parts.push(`KPM lainnya di **${targetGroup}** ditandai ${cmd.othersPresence ? 'HADIR' : 'TIDAK HADIR'}.`);
+        return { message: parts.join('\n') || 'Tidak ada perubahan yang dilakukan.' };
+      }
+
+      default:
+        return null;
+    }
+  };
+
   // --- PDF WRAPPERS ---
   const generateGraduationLetter = (kpm) => exportGraduationLetter({ kpm, currentConfig, setIsGeneratingPDF, showAlert, showToast });
   const generateSemesterPDF = (action = 'download') => exportSemesterPDF({ action, history, data, semesterYear, selectedSemester, semesterGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl });
@@ -516,32 +688,36 @@ export default function App() {
     event.target.value = "";
   };
 
-  const handleArchiveSession = async () => {
-     if(filteredData.length===0) return; 
-     showConfirm("Selesai & Reset Sesi?", `Simpan ${filteredData.length} data ke Riwayat, lalu RESET ceklis kehadiran agar kosong untuk bulan depan?`, 
-         async () => {
-             const present = filteredData.filter(d=>d.presence).length;
-             const sessionDetails = filteredData.map(k => ({ name: k.name, group: k.group, presence: k.presence, understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {}, note: k.note || "" }));
-             const newHist = sanitizeForFirestore({ id: Date.now(), date: currentConfig.tanggal, groupName: selectedGroup, materi: currentConfig.materi, tempat: currentConfig.tempat, pemateri: currentConfig.pemateri, fotoKegiatan: currentConfig.fotoKegiatan, logoKiri: currentConfig.logoKiri, logoKanan: currentConfig.logoKanan, stats: { total: filteredData.length, present, absent: filteredData.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
-             const newHistory = [newHist, ...history]; setHistory(newHistory);
-             
-             if(user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), newHist); }
+  const performArchive = async (list, groupName, cfg) => {
+     const present = list.filter(d=>d.presence).length;
+     const sessionDetails = list.map(k => ({ name: k.name, group: k.group, presence: k.presence, understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {}, note: k.note || "" }));
+     const newHist = sanitizeForFirestore({ id: Date.now(), date: cfg.tanggal, groupName, materi: cfg.materi, tempat: cfg.tempat, pemateri: cfg.pemateri, fotoKegiatan: cfg.fotoKegiatan, logoKiri: cfg.logoKiri, logoKanan: cfg.logoKanan, stats: { total: list.length, present, absent: list.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
+     setHistory(prev => [newHist, ...prev]);
 
-             const resetData = data.map(item => { const isInFiltered = filteredData.some(f => f.id === item.id); return isInFiltered ? { ...item, presence: false, understanding: "-", note: "" } : item; });
-             setData(resetData);
+     if(user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), newHist); }
 
-             if (user && db) {
-                 const batch = writeBatch(db);
-                 data.forEach(item => {
-                     const isInFiltered = filteredData.some(f => f.id === item.id);
-                     if (isInFiltered && (item.presence || item.note)) {
-                         const docRef = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id));
-                         const cleanItem = { ...item, presence: false, understanding: "-", note: "" };
-                         batch.set(docRef, sanitizeForFirestore(cleanItem));
-                     }
-                 });
-                 await batch.commit();
+     const idSet = new Set(list.map(i => i.id));
+     setData(prev => prev.map(item => idSet.has(item.id) ? { ...item, presence: false, understanding: "-", note: "" } : item));
+
+     if (user && db) {
+         const batch = writeBatch(db);
+         list.forEach(item => {
+             if (item.presence || item.note) {
+                 const docRef = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id));
+                 const cleanItem = { ...item, presence: false, understanding: "-", note: "" };
+                 batch.set(docRef, sanitizeForFirestore(cleanItem));
              }
+         });
+         await batch.commit();
+     }
+     return newHist;
+  };
+
+  const handleArchiveSession = async () => {
+     if(filteredData.length===0) return;
+     showConfirm("Selesai & Reset Sesi?", `Simpan ${filteredData.length} data ke Riwayat, lalu RESET ceklis kehadiran agar kosong untuk bulan depan?`,
+         async () => {
+             await performArchive(filteredData, selectedGroup, currentConfig);
              closeModal(); setActiveTab('history'); showToast("Sesi Disimpan & Data Direset");
          },
          'primary'
@@ -637,7 +813,7 @@ export default function App() {
 
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <ChatBot stats={stats} dynamicGroups={dynamicGroups} />
+      <ChatBot stats={stats} dynamicGroups={dynamicGroups} onAgentCommand={handleAgentCommand} />
 
       {/* --- LINGERING MODALS & POP-UPS --- */}
       {toast.show && (<div className="fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-gray-900 text-white dark:bg-white dark:text-black rounded-full shadow-2xl flex items-center gap-3 z-[100] animate-in slide-in-from-top-4 fade-in"><CheckCircle size={18} className="text-green-400 dark:text-green-600" /><span className="font-bold text-sm">{toast.message}</span></div>)}
@@ -897,6 +1073,20 @@ export default function App() {
           <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
               <div className="bg-white dark:bg-gray-800 w-full sm:max-w-lg h-[90vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl p-6 overflow-y-auto animate-in slide-in-from-bottom-10 shadow-2xl">
                   <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-xl dark:text-white">{editModal.isNew ? 'Tambah KPM Baru' : 'Edit Data KPM'}</h3><button onClick={closeEditModal} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full"><X size={20}/></button></div>
+
+                  {/* SCAN KTP/KK (OCR AI) */}
+                  <div className="mb-4">
+                      <input ref={ktpInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleScanKtp} />
+                      <button
+                          onClick={() => ktpInputRef.current?.click()}
+                          disabled={isScanning}
+                          className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl font-bold text-sm transition border ${isScanning ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-400 border-blue-100 dark:border-blue-900/40 cursor-wait' : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent shadow-lg shadow-blue-600/20 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.98]'}`}
+                      >
+                          {isScanning ? <><Loader2 size={16} className="animate-spin"/> Membaca dokumen…</> : <><ScanLine size={16}/> Scan KTP / Kartu Keluarga</>}
+                      </button>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-1.5">AI mengisi nama, NIK, No. KK & alamat otomatis. Periksa kembali sebelum menyimpan.</p>
+                  </div>
+
                   <div className="space-y-4">
                        <div><label className="text-xs font-bold text-gray-400 block mb-1">Nama Lengkap <span className="text-red-500">*</span></label><input type="text" autoFocus={!!editModal.isNew} placeholder="Nama lengkap KPM..." value={editModal.data.name || ""} onChange={e=>handleEditChange('name',e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 font-bold dark:text-white"/></div>
                       <div className="grid grid-cols-2 gap-3">
