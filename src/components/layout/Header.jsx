@@ -55,7 +55,7 @@ export default function Header({
 
            <label className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition cursor-pointer hidden sm:block">
               <Upload size={18} />
-              <input ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
+              <input ref={fileInputRef} type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} />
            </label>
            <button onClick={() => setShowViewMenu(!showViewMenu)} aria-label="Pengaturan tampilan" className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-90 transition">
               <Settings size={18} />
@@ -96,8 +96,8 @@ export default function Header({
                           </button>
                           
                           <label className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium dark:text-white cursor-pointer sm:hidden">
-                              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400"><Upload size={16}/><span>Import Data (CSV)</span></div>
-                              <input type="file" className="hidden" accept=".csv" onChange={(e) => { handleFileUpload(e); setShowViewMenu(false); }} />
+                              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400"><Upload size={16}/><span>Import Data (CSV/Excel)</span></div>
+                              <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={(e) => { handleFileUpload(e); setShowViewMenu(false); }} />
                           </label>
                       </div>
                   </div>

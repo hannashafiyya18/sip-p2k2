@@ -253,7 +253,7 @@ export default function InputTab({
               <div className="col-span-full">
                   <EmptyState
                       title={searchTerm ? "Tidak Ada Hasil" : "Belum Ada Data KPM"}
-                      description={searchTerm ? `Tidak ditemukan KPM dengan kata kunci "${searchTerm}".` : "Import file CSV dari menu Pengaturan,\natau tambahkan data KPM secara manual."}
+                      description={searchTerm ? `Tidak ditemukan KPM dengan kata kunci "${searchTerm}".` : "Import file CSV/Excel dari menu Pengaturan,\natau tambahkan data KPM secara manual."}
                       icons={searchTerm ? [Search] : [Upload, Users, Plus]}
                       action={searchTerm ? undefined : { label: "+ Tambah KPM Manual", onClick: handleAddKPM }}
                   />

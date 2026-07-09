@@ -584,25 +584,48 @@ export default function App() {
   const handleLogoKiriUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKiri', compressed); localStorage.setItem(STORAGE_KEY_LOGO_KIRI, compressed); showToast("Logo Kiri Tersimpan Permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
   const handleLogoKananUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKanan', compressed); localStorage.setItem(STORAGE_KEY_LOGO_KANAN, compressed); showToast("Logo Kanan Tersimpan Permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
 
+  // Ubah baris tabel (array of array) menjadi data KPM. Dipakai bersama oleh CSV & Excel.
+  // Baris ke-0 dianggap header dan dilewati. Urutan kolom mengikuti format ekspor resmi.
+  const rowsToKpmData = (rows) => {
+     const newData = []; let currentId = Date.now();
+     for (let i = 1; i < rows.length; i++) {
+         const raw = rows[i] || [];
+         const clean = raw.map(c => (c === null || c === undefined) ? "" : String(c).trim());
+         if (!clean[1]) continue; // lewati baris tanpa nama (termasuk baris kosong di Excel)
+         const components = {}; const parseComp = (idx, key) => { const val = parseInt(clean[idx]); if (!isNaN(val) && val > 0) components[key] = val; };
+         parseComp(11, 'balita'); parseComp(12, 'sd'); parseComp(13, 'smp'); parseComp(14, 'sma'); parseComp(15, 'disabilitas'); parseComp(16, 'lansia'); parseComp(17, 'hamil');
+         newData.push(sanitizeForFirestore({ id: currentId++, name: clean[1] || "No Name", noKK: clean[2] || "-", nik: clean[3] || "-", address: clean[4] || "-", group: clean[21] || "Umum", desa: clean[5] || "-", kecamatan: clean[6] || "-", kabupaten: clean[7] || "-", provinsi: clean[8] || "-", bpnt: clean[22] === 'YA', components, presence: false, understanding: '-', note: "", graduationStatus: null }));
+     }
+     return newData;
+  };
+
   const handleFileUpload = (event) => {
-     const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); 
+     const file = event.target.files[0]; if (!file) return;
+     const fileName = (file.name || "").toLowerCase();
+     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+     const reader = new FileReader();
      reader.onload = async (e) => {
          try {
-             const lines = e.target.result.split('\n'); const newData = []; let currentId = Date.now();
-             for (let i = 1; i < lines.length; i++) {
-                 const line = lines[i].trim(); if (!line) continue;
-                 const parts = line.includes(';') ? line.split(';') : line.split(','); const clean = parts.map(p => p ? p.replace(/^"|"$/g, '').trim() : "");
-                 if (clean.length >= 2) {
-                     const components = {}; const parseComp = (idx, key) => { const val = parseInt(clean[idx]); if (!isNaN(val) && val > 0) components[key] = val; };
-                     parseComp(11, 'balita'); parseComp(12, 'sd'); parseComp(13, 'smp'); parseComp(14, 'sma'); parseComp(15, 'disabilitas'); parseComp(16, 'lansia'); parseComp(17, 'hamil');
-                     newData.push(sanitizeForFirestore({ id: currentId++, name: clean[1] || "No Name", noKK: clean[2] || "-", nik: clean[3] || "-", address: clean[4] || "-", group: clean[21] || "Umum", desa: clean[5] || "-", kecamatan: clean[6] || "-", kabupaten: clean[7] || "-", provinsi: clean[8] || "-", bpnt: clean[22] === 'YA', components, presence: false, understanding: '-', note: "", graduationStatus: null }));
-                 }
+             let rows = [];
+             if (isExcel) {
+                 const XLSX = await import('xlsx');
+                 const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                 const sheet = wb.Sheets[wb.SheetNames[0]];
+                 rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+             } else {
+                 const text = typeof e.target.result === 'string' ? e.target.result : new TextDecoder().decode(e.target.result);
+                 rows = text.split('\n').map(line => {
+                     const l = line.replace(/\r$/, '');
+                     const parts = l.includes(';') ? l.split(';') : l.split(',');
+                     return parts.map(p => p ? p.replace(/^"|"$/g, '').trim() : "");
+                 });
              }
+             const newData = rowsToKpmData(rows);
              if (newData.length > 0) { setPendingImport(newData); setImportModalOpen(true); }
-             else { showAlert("Import Gagal", "Tidak ada baris data valid yang ditemukan di file CSV ini. Periksa kembali format file-nya."); }
-         } catch { showAlert("Error", "Gagal import CSV"); } finally { if(fileInputRef.current) fileInputRef.current.value = ""; }
-     }; 
-     reader.readAsText(file);
+             else { showAlert("Import Gagal", `Tidak ada baris data valid yang ditemukan di file ${isExcel ? 'Excel' : 'CSV'} ini. Periksa kembali format & urutan kolomnya.`); }
+         } catch (err) { console.error("Import gagal", err); showAlert("Error", `Gagal membaca file ${isExcel ? 'Excel' : 'CSV'}. Pastikan file tidak rusak dan urutan kolomnya sesuai.`); } finally { if(fileInputRef.current) fileInputRef.current.value = ""; }
+     };
+     if (isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file);
   };
 
   const processImport = async (newData, shouldReplace) => {
@@ -834,7 +857,7 @@ export default function App() {
                   <div className="flex items-center gap-3 mb-4">
                       <div className="w-11 h-11 bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0"><FileText size={22}/></div>
                       <div>
-                          <h3 className="font-bold text-lg dark:text-white leading-tight">Pratinjau Import CSV</h3>
+                          <h3 className="font-bold text-lg dark:text-white leading-tight">Pratinjau Import Data</h3>
                           <p className="text-xs text-gray-500 dark:text-gray-400">Terbaca <span className="font-bold text-blue-600 dark:text-blue-400">{pendingImport.length} KPM</span> — periksa dulu sebelum diimpor</p>
                       </div>
                   </div>
@@ -861,7 +884,7 @@ export default function App() {
                       </table>
                       {pendingImport.length > 5 && <p className="text-[10px] text-gray-400 text-center py-1.5 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">…dan {pendingImport.length - 5} baris lainnya</p>}
                   </div>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-4">Jika nama/kelompok terlihat salah kolom, kemungkinan format CSV berbeda — batalkan dan periksa file-nya.</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-4">Jika nama/kelompok terlihat salah kolom, kemungkinan urutan kolom file berbeda — batalkan dan periksa file-nya.</p>
                   <div className="flex flex-col gap-2.5">
                       <button onClick={() => processImport(pendingImport, false)} className="p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-[0.98]"><Plus size={16}/> Tambahkan ke Data Sekarang</button>
                       {data.length > 0 && (
