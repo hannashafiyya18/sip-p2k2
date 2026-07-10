@@ -1,9 +1,10 @@
 import React from 'react';
 import { 
-  CheckCircle, XCircle, Wallet, Banknote, PieChart, Activity, Search, 
-  ChevronDown, Grid, Plus, CheckSquare, Archive, Trash2, Settings, 
-  Camera, Upload, Loader2, Eye, Download, Check, StickyNote, Edit2, 
-  CheckCheck, GraduationCap, Users, X
+  CheckCircle, XCircle, Wallet, Banknote, PieChart, Activity, Search,
+  ChevronDown, Grid, Plus, CheckSquare, Archive, Trash2, Settings,
+  Camera, Upload, Loader2, Eye, Download, Check, StickyNote, Edit2,
+  CheckCheck, GraduationCap, Users, X,
+  Calendar, MapPin, BookOpen, User, Image as ImageIcon
 } from 'lucide-react';
 import { PKH_MODULES, UNDERSTANDING_LEVELS } from '../../utils/constants';
 import { formatRupiah, calculateTotalAid } from '../../utils/helpers';
@@ -26,6 +27,7 @@ export default function InputTab({
   visibleCount, filteredData, mobileLoadMoreRef
 }) {
   const listRef = useReveal({ deps: [selectedGroup], stagger: 0.04, y: 14, max: 12 });
+  const [identityOpen, setIdentityOpen] = React.useState(false);
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
       
@@ -120,10 +122,6 @@ export default function InputTab({
                                   <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"><CheckSquare size={18} /></div>
                                   <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Hadir Semua</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Tandai semua KPM hadir</p></div>
                               </button>
-                              <button onClick={() => { handleArchiveSession(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
-                                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"><Archive size={18} /></div>
-                                  <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Selesai & Reset</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Arsipkan sesi ke Riwayat</p></div>
-                              </button>
                               <p className="px-3 pt-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700 mt-2">Data</p>
                               <button onClick={() => { handleBackupData(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
                                   <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400"><Download size={18} /></div>
@@ -149,55 +147,81 @@ export default function InputTab({
 
       {/* KONFIGURASI LAPORAN (ACCORDION) */}
       {showReportConfig && (
-          <div className={`rounded-2xl border-2 border-orange-100 dark:border-orange-900/30 bg-orange-50/50 dark:bg-orange-900/10 animate-in fade-in overflow-hidden transition-all duration-300 mb-4`}>
-              <button onClick={() => setIsConfigOpen(!isConfigOpen)} className="w-full flex items-center justify-between p-4 bg-orange-100 dark:bg-orange-900/40 hover:bg-orange-200 dark:hover:orange-900/60 transition text-orange-800 dark:text-orange-200 font-bold border-b border-orange-200 dark:border-orange-800/30">
-                  <div className="flex items-center gap-2"><Settings size={18} /> <span>Konfigurasi Laporan & Absensi</span><span className="text-[10px] font-normal opacity-70 ml-2">(Klik untuk minimize)</span></div><ChevronDown size={20} className={`transition-transform duration-300 ${isConfigOpen ? 'rotate-180' : ''}`} />
+          <div className={`rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm animate-in fade-in overflow-hidden transition-all duration-300 mb-4`}>
+              <button onClick={() => setIsConfigOpen(!isConfigOpen)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition text-gray-800 dark:text-gray-100 font-bold border-b border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-2.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 shrink-0"><Settings size={16} /></span> <span>Konfigurasi Laporan &amp; Absensi</span></div><ChevronDown size={20} className={`text-gray-400 transition-transform duration-300 ${isConfigOpen ? 'rotate-180' : ''}`} />
               </button>
-              <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isConfigOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="p-5 pt-4 space-y-4">
-                      <div className="space-y-1">
-                          <label className="text-xs font-bold opacity-60 dark:text-gray-300">Nama Pendamping <span className="font-normal opacity-70">(berlaku untuk semua kelompok)</span></label>
-                          <input type="text" value={currentConfig.pendamping || ""} onChange={e=>handlePendampingChange(e.target.value)} className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white" placeholder="Nama pendamping..." />
-                      </div>
-                      <div className="grid md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold opacity-60 dark:text-gray-300">Tanggal & Tempat</label>
-                              <input type="date" value={currentConfig.tanggal} onChange={e=>handleConfigChange('tanggal', e.target.value)} className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
-                              <input type="text" value={currentConfig.tempat} onChange={e=>handleConfigChange('tempat', e.target.value)} className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 mt-2 dark:text-white" placeholder="Tempat..." />
-                          </div>
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold opacity-60 dark:text-gray-300">Materi & Dokumentasi</label>
-                              <select className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 mb-2 dark:text-white" onChange={e => { setSelectedModule(e.target.value); if(e.target.value !== selectedModule) handleConfigChange('materi', ''); }} value={selectedModule}>
-                                 <option value="">Pilih Modul...</option>{Object.keys(PKH_MODULES).map(m => <option key={m} value={m}>{m}</option>)}
-                              </select>
-                              {selectedModule && (
-                                 <select className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white mb-2" value={currentConfig.materi ? currentConfig.materi.split(`Modul ${selectedModule} - `)[1] || "" : ""} onChange={e => handleConfigChange('materi', e.target.value ? `Modul ${selectedModule} - ${e.target.value}` : '')}>
-                                    <option value="">Pilih Sesi...</option>{PKH_MODULES[selectedModule].map(s => <option key={s} value={s}>{s}</option>)}
-                                 </select>
-                              )}
-                              <div className="flex items-center gap-2">
-                                  <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 p-2 border border-dashed border-gray-400 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition">
-                                      {isCompressing ? <Loader2 className="animate-spin" size={16}/> : <Camera size={16}/>}<span className="text-xs text-gray-500">{currentConfig.fotoKegiatan ? 'Ganti Foto' : 'Upload Foto'}</span><input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                                  </label>
-                                  {currentConfig.fotoKegiatan && <div className="w-10 h-10 rounded overflow-hidden border"><img src={currentConfig.fotoKegiatan} alt="Preview" className="w-full h-full object-cover"/></div>}
+              <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isConfigOpen ? 'max-h-[1600px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="p-5 pt-4 space-y-5">
+
+                      {/* ===== DATA SESI ===== */}
+                      <div className="space-y-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Data Sesi</p>
+                          <div className="grid md:grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                      <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><Calendar size={13} className="text-orange-500"/> Tanggal Pelaksanaan</label>
+                                      <button type="button" onClick={() => handleConfigChange('tanggal', new Date().toISOString().split('T')[0])} className="text-[11px] font-bold text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 hover:underline transition">Hari ini</button>
+                                  </div>
+                                  <input type="date" value={currentConfig.tanggal} onChange={e=>handleConfigChange('tanggal', e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                              </div>
+                              <div className="space-y-1.5">
+                                  <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><MapPin size={13} className="text-orange-500"/> Tempat</label>
+                                  <input type="text" value={currentConfig.tempat} onChange={e=>handleConfigChange('tempat', e.target.value)} placeholder="Rumah Ketua Kelompok..." className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white placeholder-gray-400" />
+                              </div>
+                              <div className="space-y-1.5">
+                                  <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><BookOpen size={13} className="text-orange-500"/> Materi / Sesi</label>
+                                  <select className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" onChange={e => { setSelectedModule(e.target.value); if(e.target.value !== selectedModule) handleConfigChange('materi', ''); }} value={selectedModule}>
+                                     <option value="">Pilih Modul...</option>{Object.keys(PKH_MODULES).map(m => <option key={m} value={m}>{m}</option>)}
+                                  </select>
+                                  {selectedModule && (
+                                     <select className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" value={currentConfig.materi ? currentConfig.materi.split(`Modul ${selectedModule} - `)[1] || "" : ""} onChange={e => handleConfigChange('materi', e.target.value ? `Modul ${selectedModule} - ${e.target.value}` : '')}>
+                                        <option value="">Pilih Sesi...</option>{PKH_MODULES[selectedModule].map(s => <option key={s} value={s}>{s}</option>)}
+                                     </select>
+                                  )}
+                              </div>
+                              <div className="space-y-1.5">
+                                  <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><Camera size={13} className="text-orange-500"/> Foto Kegiatan</label>
+                                  <div className="flex items-center gap-2">
+                                      <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 px-3 py-2.5 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:border-orange-400 hover:bg-orange-50/40 dark:hover:bg-gray-800 transition">
+                                          {isCompressing ? <Loader2 className="animate-spin text-gray-400" size={16}/> : <Camera size={16} className="text-gray-400"/>}<span className="text-xs font-medium text-gray-500 dark:text-gray-400">{currentConfig.fotoKegiatan ? 'Ganti Foto' : 'Upload Foto'}</span><input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                                      </label>
+                                      {currentConfig.fotoKegiatan && <div className="w-11 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shrink-0"><img src={currentConfig.fotoKegiatan} alt="Preview" className="w-full h-full object-cover"/></div>}
+                                  </div>
                               </div>
                           </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 border-t border-dashed border-gray-300 dark:border-gray-700 pt-4">
-                         <label className="flex flex-col gap-2">
-                             <span className="text-xs font-bold opacity-60 dark:text-gray-300">Logo Kiri (Kemensos)</span>
-                             <div className="flex items-center gap-2">
-                                 <div className="flex-1 p-2 border rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center h-12">{currentConfig.logoKiri ? <img src={currentConfig.logoKiri} className="h-8 object-contain"/> : <span className="text-[10px] text-gray-400">Kosong</span>}</div>
-                                 <label className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-300 transition"><Upload size={16}/><input type="file" accept="image/*" className="hidden" onChange={handleLogoKiriUpload} /></label>
-                             </div>
-                         </label>
-                         <label className="flex flex-col gap-2">
-                             <span className="text-xs font-bold opacity-60 dark:text-gray-300">Logo Kanan (PKH/Siger)</span>
-                             <div className="flex items-center gap-2">
-                                 <div className="flex-1 p-2 border rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center h-12">{currentConfig.logoKanan ? <img src={currentConfig.logoKanan} className="h-8 object-contain"/> : <span className="text-[10px] text-gray-400">Kosong</span>}</div>
-                                 <label className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-300 transition"><Upload size={16}/><input type="file" accept="image/*" className="hidden" onChange={handleLogoKananUpload} /></label>
-                             </div>
-                         </label>
+
+                      {/* ===== IDENTITAS & KOP (atur sekali) ===== */}
+                      <div className="rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+                          <button type="button" onClick={() => setIdentityOpen(v => !v)} className="w-full flex items-center justify-between px-3.5 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                              <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400"><User size={13} className="text-orange-500"/> Identitas &amp; Kop <span className="normal-case font-normal tracking-normal text-gray-400">· atur sekali</span></span>
+                              <ChevronDown size={16} className={`text-gray-400 transition-transform duration-300 ${identityOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${identityOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                              <div className="p-3.5 space-y-4 border-t border-gray-100 dark:border-gray-800">
+                                  <div className="space-y-1.5">
+                                      <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><User size={13} className="text-orange-500"/> Nama Pendamping <span className="font-normal text-gray-400">· berlaku semua kelompok</span></label>
+                                      <input type="text" value={currentConfig.pendamping || ""} onChange={e=>handlePendampingChange(e.target.value)} placeholder="Nama pendamping..." className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white placeholder-gray-400" />
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                      <div className="space-y-1.5">
+                                          <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><ImageIcon size={13} className="text-orange-500"/> Logo Kiri <span className="font-normal text-gray-400">(Kemensos)</span></label>
+                                          <div className="flex items-center gap-2">
+                                              <div className="flex-1 h-11 px-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center">{currentConfig.logoKiri ? <img src={currentConfig.logoKiri} className="h-7 object-contain"/> : <span className="text-[10px] text-gray-400">Kosong</span>}</div>
+                                              <label className="h-11 w-11 shrink-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-xl cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition text-gray-500 dark:text-gray-300"><Upload size={16}/><input type="file" accept="image/*" className="hidden" onChange={handleLogoKiriUpload} /></label>
+                                          </div>
+                                      </div>
+                                      <div className="space-y-1.5">
+                                          <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><ImageIcon size={13} className="text-orange-500"/> Logo Kanan <span className="font-normal text-gray-400">(PKH/Siger)</span></label>
+                                          <div className="flex items-center gap-2">
+                                              <div className="flex-1 h-11 px-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center">{currentConfig.logoKanan ? <img src={currentConfig.logoKanan} className="h-7 object-contain"/> : <span className="text-[10px] text-gray-400">Kosong</span>}</div>
+                                              <label className="h-11 w-11 shrink-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-xl cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition text-gray-500 dark:text-gray-300"><Upload size={16}/><input type="file" accept="image/*" className="hidden" onChange={handleLogoKananUpload} /></label>
+                                          </div>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-3 pt-2">
