@@ -17,7 +17,7 @@ export default function InputTab({
   showToolsMenu, setShowToolsMenu, handleAddKPM, handleMarkAllPresent,
   handleArchiveSession, handleDeleteAllData, handleBackupData, handleRestoreFile,
   showReportConfig, isConfigOpen,
-  setIsConfigOpen, currentConfig, handleConfigChange, selectedModule,
+  setIsConfigOpen, currentConfig, handleConfigChange, handlePendampingChange, selectedModule,
   setSelectedModule, isCompressing, handlePhotoUpload, handleLogoKiriUpload,
   handleLogoKananUpload, generateAbsensiPDF, isGeneratingPDF, paginatedData,
   cardPadding, isCompact, cardGap, handleStatusChange, expandedId, setExpandedId,
@@ -93,8 +93,17 @@ export default function InputTab({
          </div>
 
          <div className="flex gap-3 w-full md:w-auto">
-             <button onClick={() => setShowGroupFilter(true)} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between gap-3 min-w-[160px] shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition ${cardColor} ${textColor}`}>
+             <button onClick={() => setShowGroupFilter(true)} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between gap-3 min-w-[140px] shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition ${cardColor} ${textColor}`}>
                 <span className="truncate max-w-[120px]">{selectedGroup}</span><ChevronDown size={16} className="text-gray-400" />
+             </button>
+             <button
+                onClick={handleArchiveSession}
+                disabled={stats.total === 0}
+                aria-label="Selesai & Reset sesi — arsipkan kehadiran ke Riwayat lalu kosongkan ceklis"
+                title="Selesai & Reset — arsipkan sesi ke Riwayat"
+                className="shrink-0 flex items-center justify-center gap-2 px-3.5 sm:px-4 py-3 rounded-xl font-bold text-sm text-white bg-orange-500 hover:bg-orange-600 active:scale-95 shadow-lg shadow-orange-500/30 transition disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none">
+                <Archive size={20} />
+                <span className="hidden sm:inline">Selesai</span>
              </button>
              <div className="relative">
                  <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`p-3 rounded-xl transition active:scale-95 shadow-lg ${showToolsMenu ? 'bg-blue-700 text-white shadow-blue-600/30' : 'bg-blue-600 text-white shadow-blue-500/30'} hover:bg-blue-700`}>{showToolsMenu ? <X size={20} /> : <Grid size={20} />}</button>
@@ -146,6 +155,10 @@ export default function InputTab({
               </button>
               <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isConfigOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                   <div className="p-5 pt-4 space-y-4">
+                      <div className="space-y-1">
+                          <label className="text-xs font-bold opacity-60 dark:text-gray-300">Nama Pendamping <span className="font-normal opacity-70">(berlaku untuk semua kelompok)</span></label>
+                          <input type="text" value={currentConfig.pendamping || ""} onChange={e=>handlePendampingChange(e.target.value)} className="w-full p-2 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white" placeholder="Nama pendamping..." />
+                      </div>
                       <div className="grid md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                               <label className="text-xs font-bold opacity-60 dark:text-gray-300">Tanggal & Tempat</label>

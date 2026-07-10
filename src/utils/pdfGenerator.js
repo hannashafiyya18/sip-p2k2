@@ -75,10 +75,10 @@ export const exportSemesterPDF = async ({ action, history, data, semesterYear, s
             if (i > 0) doc.addPage("landscape");
             doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("Pemantauan KPM PKH dalam P2K2", 14, 15);
             
-            const safePemateri = session.pemateri || groupConfigs[currentGroupName]?.pemateri || currentConfig.pemateri || DEFAULT_CONFIG.pendamping;
+            const safePendamping = session.pendamping || groupConfigs[currentGroupName]?.pendamping || currentConfig.pendamping || DEFAULT_CONFIG.pendamping;
             const safeMateri = session.materi || groupConfigs[currentGroupName]?.materi || currentConfig.materi || "-";
-            
-            doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text("NAMA PENDAMPING", 14, 25); doc.setFont("helvetica", "normal"); doc.text(`: ${safePemateri}`, 60, 25);
+
+            doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text("NAMA PENDAMPING", 14, 25); doc.setFont("helvetica", "normal"); doc.text(`: ${safePendamping}`, 60, 25);
             doc.setFont("helvetica", "bold"); doc.text("Periode Pemantauan", 14, 30); doc.setFont("helvetica", "normal"); doc.text(`: ${monthName}`, 60, 30);
             doc.setFont("helvetica", "bold"); doc.text("Materi/Sesi", 14, 35); doc.setFont("helvetica", "normal"); doc.text(`: ${safeMateri}`, 60, 35);
 
@@ -142,11 +142,12 @@ export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bu
             doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("Pemantauan KPM PKH Setiap P2K2", 14, 20);
             doc.setFontSize(10); doc.setFont("helvetica", "normal"); let y = 35;
 
-            const safePemateri = historyItem.pemateri || groupConfigs[currentGroupName]?.pemateri || currentConfig.pemateri || DEFAULT_CONFIG.pendamping;
+            const safePendamping = historyItem.pendamping || groupConfigs[currentGroupName]?.pendamping || currentConfig.pendamping || DEFAULT_CONFIG.pendamping;
+            const safePemateri = historyItem.pemateri || groupConfigs[currentGroupName]?.pemateri || currentConfig.pemateri || DEFAULT_CONFIG.pemateri;
             const safeTempat = historyItem.tempat || groupConfigs[currentGroupName]?.tempat || currentConfig.tempat || "-";
             const safeMateri = historyItem.materi || groupConfigs[currentGroupName]?.materi || currentConfig.materi || "-";
 
-            const labels = [ ["Nama Pendamping", safePemateri], ["Tanggal Pelaksanaan", historyItem.date], ["Tempat", safeTempat], ["Materi", safeMateri], ["Pemateri", safePemateri] ];
+            const labels = [ ["Nama Pendamping", safePendamping], ["Tanggal Pelaksanaan", historyItem.date], ["Tempat", safeTempat], ["Materi", safeMateri], ["Pemateri", safePemateri] ];
             labels.forEach(([lbl, val]) => { doc.text(lbl, 14, y); doc.text(":", 50, y); doc.text(val || "-", 53, y); y += 6; });
 
             const totals = groupData.reduce((acc, curr) => {

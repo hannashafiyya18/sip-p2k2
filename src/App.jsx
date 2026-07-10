@@ -580,6 +580,8 @@ export default function App() {
 
   // --- CONFIG & FILES ---
   const handleConfigChange = (field, value) => { const newConfig = { ...currentConfig, [field]: value }; setCurrentConfig(newConfig); const newConfigs = { ...groupConfigs, [selectedGroup]: newConfig }; setGroupConfigs(newConfigs); localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs)); };
+  // Nama Pendamping bersifat global: satu kali ubah, berlaku ke semua kelompok.
+  const handlePendampingChange = (value) => { const newConfig = { ...currentConfig, pendamping: value }; setCurrentConfig(newConfig); const newConfigs = { ...groupConfigs }; Object.keys(newConfigs).forEach(g => { newConfigs[g] = { ...newConfigs[g], pendamping: value }; }); newConfigs[selectedGroup] = newConfig; setGroupConfigs(newConfigs); localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs)); };
   const handlePhotoUpload = async (e) => { const file = e.target.files[0]; if (!file) return; setIsCompressing(true); try { const compressed = await compressImage(file); handleConfigChange('fotoKegiatan', compressed); showToast("Foto berhasil dimuat"); } catch { showAlert("Error", "Gagal memproses foto"); } finally { setIsCompressing(false); } };
   const handleLogoKiriUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKiri', compressed); localStorage.setItem(STORAGE_KEY_LOGO_KIRI, compressed); showToast("Logo Kiri Tersimpan Permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
   const handleLogoKananUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKanan', compressed); localStorage.setItem(STORAGE_KEY_LOGO_KANAN, compressed); showToast("Logo Kanan Tersimpan Permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
@@ -792,7 +794,7 @@ export default function App() {
               handleAddKPM={handleAddKPM} handleMarkAllPresent={handleMarkAllPresent} handleArchiveSession={handleArchiveSession}
               handleDeleteAllData={handleDeleteAllData} handleBackupData={handleBackupData} handleRestoreFile={handleRestoreFile}
               showReportConfig={showReportConfig} isConfigOpen={isConfigOpen}
-              setIsConfigOpen={setIsConfigOpen} currentConfig={currentConfig} handleConfigChange={handleConfigChange}
+              setIsConfigOpen={setIsConfigOpen} currentConfig={currentConfig} handleConfigChange={handleConfigChange} handlePendampingChange={handlePendampingChange}
               selectedModule={selectedModule} setSelectedModule={setSelectedModule} isCompressing={isCompressing}
               handlePhotoUpload={handlePhotoUpload} handleLogoKiriUpload={handleLogoKiriUpload} handleLogoKananUpload={handleLogoKananUpload}
               generateAbsensiPDF={generateAbsensiPDF} isGeneratingPDF={isGeneratingPDF} paginatedData={paginatedData} cardPadding={cardPadding}
