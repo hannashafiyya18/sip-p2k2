@@ -94,8 +94,9 @@ export default function App() {
   const [showHistoryGroupFilter, setShowHistoryGroupFilter] = useState(false);
   const [historyGroupSearchTerm, setHistoryGroupSearchTerm] = useState("");
   
-  const [tempHistoryMeta, setTempHistoryMeta] = useState({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null });
-  
+  const [tempHistoryMeta, setTempHistoryMeta] = useState({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" });
+  const [historyEditSearch, setHistoryEditSearch] = useState("");
+
   const [pendingImport, setPendingImport] = useState(null); 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -353,17 +354,20 @@ export default function App() {
       if (historyItem.details) { if (Array.isArray(historyItem.details)) { detailsToEdit = JSON.parse(JSON.stringify(historyItem.details)); } else if (typeof historyItem.details === 'object') { detailsToEdit = Object.values(historyItem.details); } } 
       else { if (historyItem.groupName === "Semua Kelompok") { detailsToEdit = data.map(item => ({ name: item.name, group: item.group, presence: false, understanding: "-" })); } else { detailsToEdit = data.filter(item => item.group === historyItem.groupName).map(item => ({ name: item.name, group: item.group, presence: false, understanding: "-" })); } }
       setTempHistoryDetails(detailsToEdit); 
-      setTempHistoryMeta({ 
-          tempat: historyItem.tempat || "", 
-          materi: historyItem.materi || "", 
+      setTempHistoryMeta({
+          tempat: historyItem.tempat || "",
+          materi: historyItem.materi || "",
           pemateri: historyItem.pemateri || "",
-          fotoKegiatan: historyItem.fotoKegiatan || null
+          fotoKegiatan: historyItem.fotoKegiatan || null,
+          tanggal: historyItem.date || ""
       });
+      setHistoryEditSearch("");
       setEditingHistory(historyItem);
   };
 
   const handleTempHistoryChange = (index, field, value) => { const newDetails = [...tempHistoryDetails]; newDetails[index] = { ...newDetails[index], [field]: value }; if (field === 'presence') { if (value === true) newDetails[index].understanding = 'Baik'; else newDetails[index].understanding = '-'; } setTempHistoryDetails(newDetails); };
   const handleMarkAllTempPresent = (status) => { const newDetails = tempHistoryDetails.map(item => ({ ...item, presence: status, understanding: status ? 'Baik' : '-' })); setTempHistoryDetails(newDetails); };
+  const handleMarkAllTempBaik = () => { setTempHistoryDetails(prev => prev.map(item => item.presence ? { ...item, understanding: 'Baik' } : item)); };
 
   const handleHistoryPhotoUpload = async (e) => {
       const file = e.target.files[0];
@@ -383,10 +387,11 @@ export default function App() {
   const saveHistoryEdit = async () => {
       if (!editingHistory) return;
       const presentCount = tempHistoryDetails.filter(d => d.presence).length; const totalCount = tempHistoryDetails.length; const absentCount = totalCount - presentCount;
-      const updatedHistoryItem = { ...editingHistory, ...tempHistoryMeta, details: tempHistoryDetails, stats: { total: totalCount, present: presentCount, absent: absentCount } };
+      const { tanggal, ...restMeta } = tempHistoryMeta;
+      const updatedHistoryItem = { ...editingHistory, ...restMeta, date: tanggal || editingHistory.date, details: tempHistoryDetails, stats: { total: totalCount, present: presentCount, absent: absentCount } };
       setHistory(prev => prev.map(h => h.id === editingHistory.id ? updatedHistoryItem : h));
       if (user && db) { try { const histRef = doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(editingHistory.id)); await setDoc(histRef, sanitizeForFirestore(updatedHistoryItem)); showToast("Perubahan Riwayat Disimpan"); } catch (e) { console.error("Update History Error", e); showAlert("Error", "Gagal menyimpan perubahan ke database."); } } else { showToast("Perubahan Riwayat Disimpan (Lokal)"); }
-      setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null });
+      setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch("");
   };
 
   const handleProposeGraduation = (item) => { if (item.graduationStatus) { showToast("KPM sudah dalam daftar usulan graduasi."); return; } updateKpmItem({ ...item, graduationStatus: 'proposed' }); showToast("Berhasil diusulkan graduasi"); };
@@ -901,18 +906,23 @@ export default function App() {
       {editingHistory && (
           <div className="fixed inset-0 z-[100] bg-gray-100/90 dark:bg-gray-950/90 backdrop-blur-md flex flex-col animate-in fade-in">
               <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 shadow-sm flex items-center justify-between">
-                  <div><h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><History className="text-blue-600"/> Edit Riwayat Sesi</h2><p className="text-xs text-gray-500 dark:text-gray-400">{editingHistory.groupName} - {editingHistory.date}</p></div>
-                  <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null }); }} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"><X size={20} className="text-gray-500 dark:text-gray-400"/></button>
+                  <div><h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><History className="text-blue-600"/> Edit Riwayat Sesi</h2><p className="text-xs text-gray-500 dark:text-gray-400">{editingHistory.groupName} - {tempHistoryMeta.tanggal || editingHistory.date}</p></div>
+                  <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch(""); }} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"><X size={20} className="text-gray-500 dark:text-gray-400"/></button>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-900/50 p-2 flex gap-2 justify-center border-b border-gray-100 dark:border-gray-800">
-                  <button onClick={() => handleMarkAllTempPresent(true)} className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold hover:bg-green-200 transition flex items-center gap-1"><CheckCheck size={14}/> Hadirkan Semua</button>
-                  <button onClick={() => handleMarkAllTempPresent(false)} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-bold hover:bg-red-200 transition flex items-center gap-1"><X size={14}/> Kosongkan Semua</button>
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-2 flex flex-wrap gap-2 justify-center border-b border-gray-100 dark:border-gray-800">
+                  <button onClick={() => handleMarkAllTempPresent(true)} className="px-3 py-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200 rounded-lg text-xs font-bold hover:bg-green-200 dark:hover:bg-green-800 transition flex items-center gap-1"><CheckCheck size={14}/> Hadirkan Semua</button>
+                  <button onClick={handleMarkAllTempBaik} className="px-3 py-1.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200 rounded-lg text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-800 transition flex items-center gap-1"><CheckCircle size={14}/> Semua Baik</button>
+                  <button onClick={() => handleMarkAllTempPresent(false)} className="px-3 py-1.5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 rounded-lg text-xs font-bold hover:bg-red-200 dark:hover:bg-red-800 transition flex items-center gap-1"><X size={14}/> Kosongkan Semua</button>
               </div>
               
               {/* Form Edit Tempat, Materi, Pemateri & Foto (LAYOUT BARU) */}
               <div className="p-4 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 shrink-0">
                   <div className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-4">
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
+                          <div>
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tanggal</label>
+                              <input type="date" value={tempHistoryMeta.tanggal} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tanggal: e.target.value})} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" />
+                          </div>
                           <div>
                               <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tempat</label>
                               <input type="text" value={tempHistoryMeta.tempat} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tempat: e.target.value})} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" placeholder="Isi Tempat..." />
@@ -946,9 +956,16 @@ export default function App() {
                   </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
+              <div className="px-4 pt-3 max-w-3xl mx-auto w-full shrink-0">
+                  <div className="flex items-center px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 focus-within:border-blue-500 transition">
+                      <Search size={15} className="text-gray-400 mr-2 shrink-0" />
+                      <input type="text" value={historyEditSearch} onChange={e=>setHistoryEditSearch(e.target.value)} placeholder="Cari nama KPM..." className="bg-transparent outline-none w-full text-xs font-medium dark:text-white placeholder-gray-400" />
+                      {historyEditSearch && <button onClick={()=>setHistoryEditSearch("")} className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"><X size={14}/></button>}
+                  </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 pt-3 max-w-3xl mx-auto w-full">
                   <div className="space-y-2">
-                      {tempHistoryDetails.map((kpm, idx) => (
+                      {tempHistoryDetails.map((kpm, idx) => ({ kpm, idx })).filter(({ kpm }) => (kpm.name || "").toLowerCase().includes(historyEditSearch.toLowerCase())).map(({ kpm, idx }) => (
                           <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl border ${kpm.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}>
                               <button onClick={() => handleTempHistoryChange(idx, 'presence', !kpm.presence)} className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${kpm.presence ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-700 text-gray-300'}`}>{kpm.presence ? <Check strokeWidth={3} size={20}/> : <span className="text-xs font-bold">{idx + 1}</span>}</button>
                               <div className="flex-1 min-w-0"><p className="font-bold text-sm truncate text-gray-900 dark:text-white">{kpm.name}</p><p className="text-[10px] text-gray-500">{kpm.group}</p></div>
@@ -959,13 +976,16 @@ export default function App() {
                               </div>
                           </div>
                       ))}
+                      {historyEditSearch && tempHistoryDetails.filter(d => (d.name || "").toLowerCase().includes(historyEditSearch.toLowerCase())).length === 0 && (
+                          <p className="text-center text-xs text-gray-400 dark:text-gray-500 py-10">Tidak ada nama yang cocok dengan &quot;{historyEditSearch}&quot;.</p>
+                      )}
                   </div>
               </div>
               <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                  <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-                      <div className="hidden sm:block text-xs text-gray-500"><span className="font-bold text-green-600">{tempHistoryDetails.filter(d => d.presence).length}</span> Hadir, <span className="font-bold text-red-500">{tempHistoryDetails.length - tempHistoryDetails.filter(d => d.presence).length}</span> Absen</div>
+                  <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center sm:justify-between gap-3">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 order-1 sm:order-none"><span className="font-bold text-green-600">{tempHistoryDetails.filter(d => d.presence).length}</span> Hadir, <span className="font-bold text-red-500">{tempHistoryDetails.length - tempHistoryDetails.filter(d => d.presence).length}</span> Absen</div>
                       <div className="flex gap-3 w-full sm:w-auto">
-                          <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null }); }} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">Batal</button>
+                          <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch(""); }} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">Batal</button>
                           <button onClick={saveHistoryEdit} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition flex items-center justify-center gap-2"><Save size={18}/> Simpan Perubahan</button>
                       </div>
                   </div>
