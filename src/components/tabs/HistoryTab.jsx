@@ -17,7 +17,7 @@ export default function HistoryTab({
   const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 items-start">
             {/* --- LAPORAN BULANAN --- */}
             <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
                  <button onClick={() => setIsLaporanBulananOpen(!isLaporanBulananOpen)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
@@ -117,22 +117,33 @@ export default function HistoryTab({
             />
         ) : (
         <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredHistory.map(h => (
-                <div key={h.id} className={`p-5 rounded-2xl ${cardColor} shadow-sm border-l-4 border-l-blue-500 relative group transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg flex flex-col justify-between`}>
+            {filteredHistory.map(h => {
+                const pct = h.stats.total ? Math.round((h.stats.present / h.stats.total) * 100) : 0;
+                return (
+                <div key={h.id} role="button" tabIndex={0} onClick={() => handleEditHistory(h)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditHistory(h); } }} className={`p-5 rounded-2xl ${cardColor} shadow-sm border-l-4 border-l-blue-500 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg flex flex-col justify-between cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}>
                     <div>
-                        <div className="flex justify-between items-start mb-3">
-                            <div><div className="text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md inline-block mb-2">{h.date}</div><h3 className={`font-bold text-base ${textColor}`}>{h.groupName}</h3></div>
-                            <div className="text-right"><span className={`text-2xl font-bold ${textColor}`}>{h.stats.present}</span><span className="text-xs text-gray-400 block">Hadir</span></div>
+                        <div className="flex justify-between items-start mb-3 gap-3">
+                            <div className="min-w-0"><div className="text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md inline-block mb-2">{h.date}</div><h3 className={`font-bold text-base ${textColor}`}>{h.groupName}</h3></div>
+                            <div className="text-right shrink-0"><div className="flex items-baseline gap-0.5 justify-end"><span className={`text-2xl font-bold ${textColor}`}>{h.stats.present}</span><span className="text-xs text-gray-400">/{h.stats.total}</span></div><span className="text-[10px] text-gray-400 block">Hadir</span></div>
                         </div>
-                        <p className="text-xs text-gray-500 border-t border-dashed pt-3 dark:border-gray-700 mb-2 line-clamp-2">{h.materi}</p>
+                        <p className="text-xs text-gray-500 border-t border-dashed pt-3 dark:border-gray-700 mb-3 line-clamp-2">{h.materi}</p>
                     </div>
-                    
-                    <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEditHistory(h)} className="p-2 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100 transition" title="Edit Riwayat"><Pencil size={16} /></button>
-                        <button onClick={() => handleDeleteHistory(h.id)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition" title="Hapus Riwayat"><Trash2 size={16} /></button>
+
+                    <div>
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                                <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                            </div>
+                            <span className="text-[10px] font-bold text-gray-400 shrink-0 tabular-nums">{pct}%</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); handleEditHistory(h); }} className="flex-1 py-2 bg-blue-50 text-blue-600 dark:bg-blue-900 dark:text-blue-200 rounded-lg text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-800 transition flex items-center justify-center gap-1.5"><Pencil size={14} /> Edit</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(h.id); }} className="py-2 px-3 bg-red-50 text-red-600 dark:bg-red-900 dark:text-red-200 rounded-lg text-xs font-bold hover:bg-red-100 dark:hover:bg-red-800 transition flex items-center justify-center" title="Hapus Riwayat" aria-label="Hapus Riwayat"><Trash2 size={14} /></button>
+                        </div>
                     </div>
                 </div>
-            ))}
+                );
+            })}
         </div>
         )}
     </div>
