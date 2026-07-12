@@ -17,6 +17,17 @@ export const loadScript = (src) => {
   });
 };
 
+// localStorage dibatasi ±5MB per situs; setItem melempar QuotaExceededError saat penuh.
+// Selalu pakai helper ini agar kuota penuh tidak pernah membuat aplikasi crash (blank putih).
+export const safeSetItem = (key, value) => {
+  try { localStorage.setItem(key, value); return true; } catch { return false; }
+};
+
+// Buang field gambar base64 (foto kegiatan & logo) dari item riwayat — versi ringan
+// untuk cadangan lokal saat kuota localStorage penuh. Data lengkap tetap ada di Firestore.
+export const stripHeavyHistoryFields = (history) =>
+  history.map(({ fotoKegiatan, logoKiri, logoKanan, ...rest }) => rest);
+
 export const sanitizeForFirestore = (obj) => {
   if (obj === null || obj === undefined) return null;
   if (Array.isArray(obj)) return obj.map(item => sanitizeForFirestore(item));

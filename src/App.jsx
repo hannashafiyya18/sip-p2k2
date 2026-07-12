@@ -12,7 +12,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } fro
 
 // --- IMPORT CONSTANTS, HELPERS, & PDF ---
 import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN } from './utils/constants';
-import { calculateTotalAid, sanitizeForFirestore, compressImage } from './utils/helpers';
+import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields } from './utils/helpers';
 import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF } from './utils/pdfGenerator';
 
 // --- IMPORT KOMPONEN UI ---
@@ -108,6 +108,7 @@ export default function App() {
   const ktpInputRef = useRef(null);
   const scrollContainerRef = useRef(null); 
   const prevSelectedGroupRef = useRef(selectedGroup);
+  const quotaWarnedRef = useRef(false);
   
   // MODALS
   const [toast, setToast] = useState({ show: false, message: '' });
@@ -187,9 +188,18 @@ export default function App() {
     }
   }, [user]);
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(data)); }, [data]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history)); }, [history]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEY_VIEW_SETTINGS, JSON.stringify(viewSettings)); if (viewSettings.theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [viewSettings]);
+  useEffect(() => { safeSetItem(STORAGE_KEY_DATA, JSON.stringify(data)); }, [data]);
+  useEffect(() => {
+    if (safeSetItem(STORAGE_KEY_HISTORY, JSON.stringify(history))) return;
+    // Kuota localStorage penuh: simpan cadangan lokal tanpa foto/logo agar aplikasi tetap jalan.
+    // Versi lengkap (dengan foto) tetap tersimpan di Firestore saat login.
+    const savedSlim = safeSetItem(STORAGE_KEY_HISTORY, JSON.stringify(stripHeavyHistoryFields(history)));
+    if (!quotaWarnedRef.current) {
+      quotaWarnedRef.current = true;
+      showToast(savedSlim ? "Memori lokal penuh — cadangan riwayat disimpan tanpa foto" : "Memori lokal penuh — riwayat tidak tersalin ke perangkat");
+    }
+  }, [history]);
+  useEffect(() => { safeSetItem(STORAGE_KEY_VIEW_SETTINGS, JSON.stringify(viewSettings)); if (viewSettings.theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [viewSettings]);
 
   // MEMOS
   const dynamicGroups = useMemo(() => ["Semua Kelompok", ...[...new Set(data.map(item => item.group))].sort()], [data]);
@@ -584,12 +594,12 @@ export default function App() {
   const generateAbsensiPDF = (action = 'download') => exportAbsensiPDF({ action, data, selectedGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl });
 
   // --- CONFIG & FILES ---
-  const handleConfigChange = (field, value) => { const newConfig = { ...currentConfig, [field]: value }; setCurrentConfig(newConfig); const newConfigs = { ...groupConfigs, [selectedGroup]: newConfig }; setGroupConfigs(newConfigs); localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs)); };
+  const handleConfigChange = (field, value) => { const newConfig = { ...currentConfig, [field]: value }; setCurrentConfig(newConfig); const newConfigs = { ...groupConfigs, [selectedGroup]: newConfig }; setGroupConfigs(newConfigs); safeSetItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs)); };
   // Nama Pendamping bersifat global: satu kali ubah, berlaku ke semua kelompok.
-  const handlePendampingChange = (value) => { const newConfig = { ...currentConfig, pendamping: value }; setCurrentConfig(newConfig); const newConfigs = { ...groupConfigs }; Object.keys(newConfigs).forEach(g => { newConfigs[g] = { ...newConfigs[g], pendamping: value }; }); newConfigs[selectedGroup] = newConfig; setGroupConfigs(newConfigs); localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs)); };
+  const handlePendampingChange = (value) => { const newConfig = { ...currentConfig, pendamping: value }; setCurrentConfig(newConfig); const newConfigs = { ...groupConfigs }; Object.keys(newConfigs).forEach(g => { newConfigs[g] = { ...newConfigs[g], pendamping: value }; }); newConfigs[selectedGroup] = newConfig; setGroupConfigs(newConfigs); safeSetItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs)); };
   const handlePhotoUpload = async (e) => { const file = e.target.files[0]; if (!file) return; setIsCompressing(true); try { const compressed = await compressImage(file); handleConfigChange('fotoKegiatan', compressed); showToast("Foto berhasil dimuat"); } catch { showAlert("Error", "Gagal memproses foto"); } finally { setIsCompressing(false); } };
-  const handleLogoKiriUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKiri', compressed); localStorage.setItem(STORAGE_KEY_LOGO_KIRI, compressed); showToast("Logo Kiri Tersimpan Permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
-  const handleLogoKananUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKanan', compressed); localStorage.setItem(STORAGE_KEY_LOGO_KANAN, compressed); showToast("Logo Kanan Tersimpan Permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
+  const handleLogoKiriUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKiri', compressed); const ok = safeSetItem(STORAGE_KEY_LOGO_KIRI, compressed); showToast(ok ? "Logo Kiri Tersimpan Permanen" : "Logo dimuat, tapi memori lokal penuh — tidak tersimpan permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
+  const handleLogoKananUpload = async (e) => { const file = e.target.files[0]; if (!file) return; try { const compressed = await compressImage(file); handleConfigChange('logoKanan', compressed); const ok = safeSetItem(STORAGE_KEY_LOGO_KANAN, compressed); showToast(ok ? "Logo Kanan Tersimpan Permanen" : "Logo dimuat, tapi memori lokal penuh — tidak tersimpan permanen"); } catch { showAlert("Error", "Gagal upload logo"); } };
 
   // Ubah baris tabel (array of array) menjadi data KPM. Dipakai bersama oleh CSV & Excel.
   // Baris ke-0 dianggap header dan dilewati. Urutan kolom mengikuti format ekspor resmi.
@@ -699,7 +709,7 @@ export default function App() {
             }
         }
         setData(newData); setHistory(newHistory); setGroupConfigs(newConfigs);
-        localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs));
+        safeSetItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs));
         showToast("Backup berhasil dipulihkan");
     } catch (e) { console.error("Restore failed", e); showAlert("Error", "Gagal memulihkan backup ke database."); }
   };
