@@ -4,7 +4,7 @@ import {
   ChevronDown, Grid, Plus, CheckSquare, Archive, Trash2, Settings,
   Camera, Upload, Loader2, Eye, Download, Check, StickyNote, Edit2,
   CheckCheck, GraduationCap, Users, X,
-  Calendar, MapPin, BookOpen, User, Image as ImageIcon
+  Calendar, MapPin, BookOpen, User, Image as ImageIcon, ScanLine, Sparkles
 } from 'lucide-react';
 import { PKH_MODULES, UNDERSTANDING_LEVELS } from '../../utils/constants';
 import { formatRupiah, calculateTotalAid } from '../../utils/helpers';
@@ -24,7 +24,8 @@ export default function InputTab({
   cardPadding, isCompact, cardGap, handleStatusChange, expandedId, setExpandedId,
   textSizeBase, textSizeSub, renderComponentBadges, handleUnderstandingChange,
   openNoteModal, openEditModal, handleProposeGraduation, handleDeleteKPM,
-  visibleCount, filteredData, mobileLoadMoreRef
+  visibleCount, filteredData, mobileLoadMoreRef,
+  handleScanAbsen, isScanningAbsen, autoAssess, setAutoAssess
 }) {
   const listRef = useReveal({ deps: [selectedGroup], stagger: 0.04, y: 14, max: 12 });
   const [identityOpen, setIdentityOpen] = React.useState(false);
@@ -122,6 +123,17 @@ export default function InputTab({
                                   <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"><CheckSquare size={18} /></div>
                                   <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Hadir Semua</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Tandai semua KPM hadir</p></div>
                               </button>
+                              <div className="w-full flex items-center gap-1">
+                                  <label className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left min-w-0 ${isScanningAbsen ? 'opacity-50 pointer-events-none' : 'hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] cursor-pointer'}`}>
+                                      <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">{isScanningAbsen ? <Loader2 size={18} className="animate-spin"/> : <ScanLine size={18} />}</div>
+                                      <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Scan Absen (Foto)</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Galeri — foto lembar TTD, bisa 2 halaman</p></div>
+                                      <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { setShowToolsMenu(false); handleScanAbsen(e); }} />
+                                  </label>
+                                  <label className={`shrink-0 w-10 h-10 mr-2 rounded-xl flex items-center justify-center transition ${isScanningAbsen ? 'opacity-50 pointer-events-none bg-gray-100 dark:bg-gray-700' : 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/50 active:scale-95 cursor-pointer'}`} title="Ambil langsung dari kamera">
+                                      <Camera size={17} />
+                                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { setShowToolsMenu(false); handleScanAbsen(e); }} />
+                                  </label>
+                              </div>
                               <p className="px-3 pt-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700 mt-2">Data</p>
                               <button onClick={() => { handleBackupData(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
                                   <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400"><Download size={18} /></div>
@@ -224,6 +236,15 @@ export default function InputTab({
                           </div>
                       </div>
                       
+                      {/* ===== PENILAIAN OTOMATIS (aturan transparan, bisa dimatikan) ===== */}
+                      <label className="flex items-start gap-3 p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                          <input type="checkbox" checked={autoAssess} onChange={e => setAutoAssess(e.target.checked)} className="mt-0.5 w-4 h-4 shrink-0 accent-orange-500 cursor-pointer" />
+                          <div className="min-w-0">
+                              <p className="text-xs font-bold text-gray-700 dark:text-gray-200 flex items-center gap-1.5"><Sparkles size={13} className="text-orange-500"/> Terapkan penilaian otomatis</p>
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 leading-relaxed">Saat kehadiran diisi massal (scan foto / hadir semua): hadir = <b>Baik</b>, komponen lansia tunggal = <b>Kurang</b>, absen = <b>Tidak Dapat Dinilai</b>. Penilaian yang sudah Anda koreksi manual tidak akan ditimpa.</p>
+                          </div>
+                      </label>
+
                       <div className="grid grid-cols-2 gap-3 pt-2">
                            <button onClick={() => generateAbsensiPDF('preview')} disabled={isGeneratingPDF} className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-bold hover:bg-blue-100 transition flex justify-center gap-2 items-center text-xs dark:bg-blue-900/30 dark:text-blue-400">
                                {isGeneratingPDF ? <Loader2 className="animate-spin"/> : <Eye size={16}/>} Preview Absensi
