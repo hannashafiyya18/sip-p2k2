@@ -835,7 +835,10 @@ export default function App() {
      if (user && db) {
          const batch = writeBatch(db);
          list.forEach(item => {
-             if (item.presence || item.note) {
+             // Reset ke Firestore untuk KPM yang punya sesuatu untuk dibersihkan.
+             // Kondisi understanding/manual ditambahkan agar nilai hasil penilaian otomatis pada
+             // KPM yang absen (mis. "Tidak Dapat Dinilai") tidak tertinggal di database setelah reset.
+             if (item.presence || item.note || (item.understanding && item.understanding !== "-") || item.understandingManual) {
                  const docRef = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id));
                  const cleanItem = { ...item, presence: false, understanding: "-", note: "", understandingManual: false };
                  batch.set(docRef, sanitizeForFirestore(cleanItem));
