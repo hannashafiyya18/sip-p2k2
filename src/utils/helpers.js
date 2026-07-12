@@ -28,6 +28,15 @@ export const safeSetItem = (key, value) => {
 export const stripHeavyHistoryFields = (history) =>
   history.map(({ fotoKegiatan, logoKiri, logoKanan, ...rest }) => rest);
 
+// Aturan penilaian otomatis saat kehadiran di-set massal (scan foto / hadir semua):
+// absen = "Tidak Dapat Dinilai"; hadir dengan komponen lansia tunggal = "Kurang"; hadir lainnya = "Baik".
+// Jangan dipakai menimpa nilai jika kpm.understandingManual === true (koreksi manual pendamping).
+export const deriveUnderstanding = (kpm, presence = kpm.presence) => {
+  if (!presence) return "Tidak Dapat Dinilai";
+  if (kpm.components?.lansia === 1) return "Kurang";
+  return "Baik";
+};
+
 export const sanitizeForFirestore = (obj) => {
   if (obj === null || obj === undefined) return null;
   if (Array.isArray(obj)) return obj.map(item => sanitizeForFirestore(item));

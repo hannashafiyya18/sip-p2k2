@@ -18,5 +18,6 @@ export const STORAGE_KEY_DATA = 'pkh_app_data_v2';
 export const STORAGE_KEY_CONFIG = 'pkh_app_config_v1';
 export const STORAGE_KEY_HISTORY = 'pkh_app_history_v1';
 export const STORAGE_KEY_VIEW_SETTINGS = 'pkh_app_view_settings_v3'; 
+export const STORAGE_KEY_AUTO_ASSESS = 'pkh_app_auto_assess_v1';
 export const STORAGE_KEY_LOGO_KIRI = 'pkh_app_logo_kiri_global';
 export const STORAGE_KEY_LOGO_KANAN = 'pkh_app_logo_kanan_global';

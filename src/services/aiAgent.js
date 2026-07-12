@@ -109,6 +109,60 @@ Hanya kembalikan JSON.`;
   }
 };
 
+/**
+ * Scan lembar DAFTAR HADIR yang sudah ditandatangani:
+ * membaca 1 atau beberapa foto (multi-halaman) dan menentukan baris mana
+ * yang kolom TTD-nya terisi tanda tangan. Nama di lembar TERCETAK urut dari
+ * aplikasi, jadi AI hanya menilai ada/tidaknya tanda tangan per baris.
+ * @param {string[]} dataUrls hasil compressImage (data:image/jpeg;base64,...)
+ * @param {string[]} kpmNames daftar nama KPM urut sesuai lembar absen
+ * @returns {Promise<Array<{no: number|null, name: string, signed: boolean, confidence: 'high'|'low'}>>}
+ */
+export const extractAttendanceSheet = async (dataUrls, kpmNames) => {
+  const images = (dataUrls || []).map(dataUrl => {
+    const match = /^data:(image\/[a-z]+);base64,(.*)$/i.exec(dataUrl || '');
+    if (!match) throw new Error('Format gambar tidak dikenali.');
+    return { mimeType: match[1], data: match[2] };
+  });
+  if (images.length === 0) throw new Error('Tidak ada foto yang bisa diproses.');
+
+  const prompt = `Anda membaca foto lembar "DAFTAR HADIR" pertemuan kelompok PKH yang sudah ditandatangani peserta.
+Lembar berupa tabel: kolom nomor urut, kolom NAMA (tercetak), dan kolom paling kanan adalah TTD/TANDA TANGAN.
+${images.length > 1 ? `Ada ${images.length} foto — semuanya bagian dari SATU daftar yang sama (bersambung halaman berikutnya).` : ''}
+
+Daftar nama yang TERCETAK di lembar, urut dari atas (gunakan ini sebagai acuan, JANGAN menebak nama lain):
+${(kpmNames || []).map((n, i) => `${i + 1}. ${n}`).join('\n')}
+
+Tugas Anda HANYA menilai untuk SETIAP baris: apakah kolom TTD berisi coretan/tanda tangan (signed=true) atau kosong (signed=false).
+Kembalikan JSON murni (tanpa markdown) dengan format:
+{ "rows": [ { "no": 1, "name": "NAMA PERSIS DARI DAFTAR", "signed": false, "confidence": "high" } ] }
+
+Aturan:
+- Sertakan SEMUA baris yang terlihat di foto, urut sesuai nomor.
+- "signed" = true jika ada coretan/paraf/tanda tangan apa pun di kolom TTD baris itu; false jika benar-benar kosong.
+- "confidence" = "low" jika tanda tangan sangat tipis, terpotong di tepi foto, menimpa baris lain, atau Anda ragu; selain itu "high".
+- Salin "name" persis dari daftar acuan di atas sesuai barisnya. Jangan mengarang baris yang tidak ada.
+Hanya kembalikan JSON.`;
+
+  const result = await callGemini(prompt, images);
+  try {
+    const cleaned = (result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (!parsed || !Array.isArray(parsed.rows)) throw new Error('bentuk tidak sesuai');
+    return parsed.rows
+      .filter(r => r && typeof r === 'object' && (r.name || r.no))
+      .map(r => ({
+        no: Number.isFinite(parseInt(r.no)) ? parseInt(r.no) : null,
+        name: String(r.name || '').trim(),
+        signed: r.signed === true,
+        confidence: r.confidence === 'low' ? 'low' : 'high',
+      }));
+  } catch (error) {
+    console.warn('Gagal parse hasil scan absen:', error, result);
+    throw new Error('Hasil pembacaan foto tidak valid. Coba foto ulang dengan lebih terang, tegak, dan seluruh tabel terlihat.');
+  }
+};
+
 // --- FUZZY MATCHING (dijalankan lokal, tahan salah dengar dikte suara) ---
 
 const normalizeText = (s) =>
