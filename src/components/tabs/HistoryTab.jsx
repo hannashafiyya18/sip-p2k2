@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, ChevronDown, Loader2, Eye, Download, FileBadge, Filter, History, Pencil, Trash2, Archive } from 'lucide-react';
+import { FileText, ChevronDown, Loader2, Eye, Download, FileBadge, Filter, History, Pencil, Trash2, Archive, FileSpreadsheet, Calculator } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import { useReveal } from '../../hooks/useReveal';
 
@@ -12,7 +12,8 @@ export default function HistoryTab({
   semesterGroup, generateSemesterPDF, filteredHistory, setShowHistoryGroupFilter,
   historyFilterGroup, historyFilterYear, setHistoryFilterYear,
   historyFilterMonth, setHistoryFilterMonth, textColor, cardColor,
-  handleEditHistory, handleDeleteHistory
+  handleEditHistory, handleDeleteHistory,
+  isRekapOpen, setIsRekapOpen, rekapMonth, rekapYear, setRekapYear, setShowRekapMonthModal, handleBuildRekap
 }) {
   const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
   return (
@@ -79,6 +80,31 @@ export default function HistoryTab({
                              {isGeneratingPDF ? <Loader2 className="animate-spin" size={14}/> : <Download size={14}/>} Unduh
                          </button>
                      </div>
+                 </div>
+            </div>
+
+            {/* --- REKAP KECAMATAN (EXCEL) --- */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden lg:col-span-2">
+                 <button onClick={() => setIsRekapOpen(!isRekapOpen)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                     <div className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-white">
+                         <FileSpreadsheet size={18} className="text-emerald-600"/> Rekap Kecamatan (Excel)
+                         <span className="hidden sm:inline text-[10px] font-normal text-gray-400">· baris data Anda untuk sheet rekap koordinator</span>
+                     </div>
+                     <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 ${isRekapOpen ? 'rotate-180' : ''}`} />
+                 </button>
+
+                 <div className={`transition-all duration-300 ease-in-out ${isRekapOpen ? 'max-h-[500px] opacity-100 p-4 pt-0' : 'max-h-0 opacity-0 overflow-hidden px-4'}`}>
+                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                         <button onClick={() => setShowRekapMonthModal(true)} className="p-3 rounded-xl border bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-xs font-bold dark:text-white outline-none hover:ring-2 hover:ring-emerald-500 flex justify-between items-center text-left">
+                             <span>{['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][rekapMonth]}</span>
+                             <ChevronDown size={14} className="text-gray-400 shrink-0"/>
+                         </button>
+                         <input type="number" className="p-3 rounded-xl border bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-xs font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500" value={rekapYear} onChange={(e) => setRekapYear(e.target.value)} placeholder="Tahun" />
+                         <button onClick={handleBuildRekap} className="col-span-2 bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 transition flex justify-center items-center gap-2 text-xs py-3">
+                             <Calculator size={14}/> Hitung &amp; Pratinjau Rekap
+                         </button>
+                     </div>
+                     <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">Dihitung dari sesi yang sudah diarsipkan ke Riwayat. Hasilnya bisa dikoreksi dulu, lalu diunduh sebagai Excel format resmi atau disalin untuk ditempel ke sheet kecamatan.</p>
                  </div>
             </div>
         </div>

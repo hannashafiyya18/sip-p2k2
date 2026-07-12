@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw,
   History, CheckCheck, Save, Search, Check, Minus, AlertTriangle,
-  Camera, Image as ImageIcon, HelpCircle, ScanLine
+  Camera, Image as ImageIcon, HelpCircle, ScanLine, Copy, Download, FileSpreadsheet
 } from 'lucide-react';
 
 // --- IMPORT FIREBASE ---
@@ -14,6 +14,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } fro
 import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN } from './utils/constants';
 import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding } from './utils/helpers';
 import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF } from './utils/pdfGenerator';
+import { buildRekapKecamatan, rekapRowValues, downloadRekapXLSX } from './utils/rekapGenerator';
 
 // --- IMPORT KOMPONEN UI ---
 import Header from './components/layout/Header';
@@ -89,6 +90,11 @@ export default function App() {
   const [semesterGroupSearchTerm, setSemesterGroupSearchTerm] = useState("");
   const [isLaporanBulananOpen, setIsLaporanBulananOpen] = useState(false);
   const [isLaporanSemesterOpen, setIsLaporanSemesterOpen] = useState(false);
+  const [isRekapOpen, setIsRekapOpen] = useState(false);
+  const [rekapMonth, setRekapMonth] = useState(new Date().getMonth());
+  const [rekapYear, setRekapYear] = useState(new Date().getFullYear());
+  const [showRekapMonthModal, setShowRekapMonthModal] = useState(false);
+  const [rekapPreview, setRekapPreview] = useState(null); // hasil buildRekapKecamatan + koreksi manual pengguna
   const [editingHistory, setEditingHistory] = useState(null);
   const [tempHistoryDetails, setTempHistoryDetails] = useState([]);
   const [historyFilterYear, setHistoryFilterYear] = useState(new Date().getFullYear());
@@ -686,6 +692,37 @@ export default function App() {
   const generateLaporanBulananPDF = (action = 'download') => exportLaporanBulananPDF({ action, history, bulananYear, bulananMonth, bulananGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl });
   const generateAbsensiPDF = (action = 'download') => exportAbsensiPDF({ action, data, selectedGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl });
 
+  // --- REKAP KECAMATAN (EXCEL) ---
+  // Hitung angka rekap bulan terpilih dari Riwayat, tampilkan dulu untuk dikoreksi (materi/alasan dll), baru diunduh/disalin.
+  const handleBuildRekap = () => {
+    const r = buildRekapKecamatan({ history, data, currentConfig, month: rekapMonth, year: rekapYear });
+    if (!r) {
+      showAlert("Belum Ada Sesi Bulan Ini", `Tidak ada sesi ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][rekapMonth]} ${rekapYear} di Riwayat. Rekap dihitung dari sesi yang sudah diarsipkan — selesaikan pertemuan lalu tekan "Selesai & Reset" di tab Input terlebih dahulu.`);
+      return;
+    }
+    setRekapPreview(r);
+  };
+  const handleRekapField = (field, value) => setRekapPreview(prev => prev ? { ...prev, [field]: value } : prev);
+  const handleCopyRekap = async () => {
+    if (!rekapPreview) return;
+    try {
+      await navigator.clipboard.writeText(rekapRowValues(rekapPreview).join('\t'));
+      showToast("Angka rekap disalin — tempel di baris Anda pada kolom Kecamatan");
+    } catch {
+      showAlert("Gagal Menyalin", "Browser menolak akses clipboard. Salin angka secara manual dari tampilan ini.");
+    }
+  };
+  const handleDownloadRekap = async () => {
+    if (!rekapPreview) return;
+    try {
+      await downloadRekapXLSX(rekapPreview);
+      showToast("File Excel rekap berhasil diunduh");
+    } catch (e) {
+      console.error("Rekap XLSX error", e);
+      showAlert("Error", "Gagal membuat file Excel rekap.");
+    }
+  };
+
   // --- CONFIG & FILES ---
   const handleConfigChange = (field, value) => { const newConfig = { ...currentConfig, [field]: value }; setCurrentConfig(newConfig); const newConfigs = { ...groupConfigs, [selectedGroup]: newConfig }; setGroupConfigs(newConfigs); safeSetItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs)); };
   // Nama Pendamping bersifat global: satu kali ubah, berlaku ke semua kelompok.
@@ -944,6 +981,8 @@ export default function App() {
               historyFilterGroup={historyFilterGroup} historyFilterYear={historyFilterYear} setHistoryFilterYear={setHistoryFilterYear}
               historyFilterMonth={historyFilterMonth} setHistoryFilterMonth={setHistoryFilterMonth} textColor={textColor} cardColor={cardColor}
               handleEditHistory={handleEditHistory} handleDeleteHistory={handleDeleteHistory}
+              isRekapOpen={isRekapOpen} setIsRekapOpen={setIsRekapOpen} rekapMonth={rekapMonth} rekapYear={rekapYear}
+              setRekapYear={setRekapYear} setShowRekapMonthModal={setShowRekapMonthModal} handleBuildRekap={handleBuildRekap}
             />
         )}
       </main>
@@ -1208,6 +1247,86 @@ export default function App() {
                             {g} {bulananGroup === g && <Check size={16}/>}
                         </button>
                     ))}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showRekapMonthModal && (
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 space-y-4">
+                <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-lg dark:text-white">Pilih Bulan Rekap</h3>
+                    <button onClick={()=>setShowRekapMonthModal(false)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full dark:text-white"><X size={18}/></button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 max-h-[50vh] overflow-y-auto p-1">
+                    {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((mName, idx) => (
+                        <button key={mName} onClick={() => { setRekapMonth(idx); setShowRekapMonthModal(false); }} className={`p-3 rounded-xl font-bold text-xs transition border ${rekapMonth === idx ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800' : 'hover:bg-gray-50 border-gray-100 dark:border-gray-700 dark:hover:bg-gray-700 dark:text-gray-300'}`}>
+                            {mName}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {rekapPreview && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-gray-800 w-full sm:max-w-lg max-h-[92vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-200">
+                <div className="p-5 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0 flex items-center gap-3">
+                    <div className="w-11 h-11 bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-xl flex items-center justify-center shrink-0"><FileSpreadsheet size={22}/></div>
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-lg dark:text-white leading-tight">Rekap Kecamatan P2K2</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{rekapPreview.bulanLabel} — periksa & koreksi sebelum diunduh</p>
+                    </div>
+                    <button onClick={() => setRekapPreview(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition shrink-0"><X size={18} className="dark:text-gray-300"/></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                    {rekapPreview.adaKelompokMultiSesi && (
+                        <p className="text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-lg px-3 py-2">Ada kelompok dengan lebih dari satu sesi bulan ini — dipakai sesi terbaru per kelompok agar KPM tidak terhitung dobel.</p>
+                    )}
+                    <div className="grid grid-cols-3 gap-2">
+                        {[
+                            ['Kelompok', `${rekapPreview.kelompokTerrealisasi}/${rekapPreview.totalKelompok}`, 'terrealisasi'],
+                            ['Total KPM', rekapPreview.totalKPM, 'dampingan'],
+                            ['Hadir', rekapPreview.hadir, `${rekapPreview.tidakHadir} tidak hadir`],
+                        ].map(([lbl, val, sub]) => (
+                            <div key={lbl} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-center">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{lbl}</p>
+                                <p className="text-xl font-bold text-gray-900 dark:text-white tabular-nums">{val}</p>
+                                <p className="text-[10px] text-gray-400">{sub}</p>
+                            </div>
+                        ))}
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Pengetahuan &amp; Pemahaman</p>
+                        <div className="grid grid-cols-4 gap-2">
+                            {[['Kurang', rekapPreview.kurang], ['Baik', rekapPreview.baik], ['Sangat Baik', rekapPreview.sangatBaik], ['Tdk Dinilai', rekapPreview.tidakDapatDinilai]].map(([lbl, val]) => (
+                                <div key={lbl} className="p-2 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 text-center">
+                                    <p className="text-base font-bold text-gray-900 dark:text-white tabular-nums">{val}</p>
+                                    <p className="text-[9px] text-gray-400 leading-tight">{lbl}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Kecamatan</label><input type="text" value={rekapPreview.kecamatan} onChange={e=>handleRekapField('kecamatan', e.target.value)} placeholder="Nama kecamatan..." className="w-full text-xs p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white"/></div>
+                            <div><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Kabupaten/Kota</label><input type="text" value={rekapPreview.kabupaten} onChange={e=>handleRekapField('kabupaten', e.target.value)} placeholder="Contoh: Kab. Sleman" className="w-full text-xs p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white"/></div>
+                        </div>
+                        <div><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Materi <span className="normal-case font-normal">· gabungan semua sesi, boleh diringkas</span></label><textarea value={rekapPreview.materi} onChange={e=>handleRekapField('materi', e.target.value)} rows={2} className="w-full text-xs p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white resize-none"/></div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Pemateri</label><input type="text" value={rekapPreview.pemateri} onChange={e=>handleRekapField('pemateri', e.target.value)} className="w-full text-xs p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white"/></div>
+                            <div><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Alasan Jika Tidak Melaksanakan</label><input type="text" value={rekapPreview.alasan} onChange={e=>handleRekapField('alasan', e.target.value)} placeholder="Kosongkan jika terlaksana" className="w-full text-xs p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white"/></div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">Pendamping: <span className="font-bold">{rekapPreview.pendamping || '-'}</span> · ubah lewat Konfigurasi &gt; Identitas &amp; Kop.</p>
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-gray-100 dark:border-gray-700 shrink-0 flex gap-2">
+                    <button onClick={handleCopyRekap} className="flex-1 py-3 rounded-xl font-bold text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-[0.98] transition flex items-center justify-center gap-1.5"><Copy size={14}/> Salin Angka</button>
+                    <button onClick={handleDownloadRekap} className="flex-[1.4] py-3 rounded-xl font-bold text-xs bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition flex items-center justify-center gap-1.5"><Download size={14}/> Unduh Excel</button>
                 </div>
             </div>
         </div>
