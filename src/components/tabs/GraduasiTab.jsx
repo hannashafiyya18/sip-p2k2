@@ -4,7 +4,7 @@ import EmptyState from '../ui/EmptyState';
 import { useReveal } from '../../hooks/useReveal';
 
 export default function GraduasiTab({
-  cardColor, textColor, filteredGraduationData,
+  cardColor, filteredGraduationData,
   handleCancelGraduation, handleUpdateGraduationStatus,
   generateGraduationLetter, isGeneratingPDF
 }) {

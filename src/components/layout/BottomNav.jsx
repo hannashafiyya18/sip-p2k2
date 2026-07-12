@@ -12,6 +12,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg border-t border-gray-200/70 dark:border-gray-800 pb-safe z-50 md:hidden shadow-[0_-8px_30px_-12px_rgba(0,0,0,0.12)]">
         <div className="flex justify-around items-center px-2 pt-1.5 pb-1">
+            {/* eslint-disable-next-line no-unused-vars -- Icon dipakai sebagai komponen JSX di bawah */}
             {NAV_ITEMS.map(({ id, label, Icon, active, dot }) => {
                 const isActive = activeTab === id;
                 return (

@@ -26,6 +26,7 @@ export const safeSetItem = (key, value) => {
 // Buang field gambar base64 (foto kegiatan & logo) dari item riwayat — versi ringan
 // untuk cadangan lokal saat kuota localStorage penuh. Data lengkap tetap ada di Firestore.
 export const stripHeavyHistoryFields = (history) =>
+  // eslint-disable-next-line no-unused-vars -- destrukturisasi hanya untuk membuang field berat
   history.map(({ fotoKegiatan, logoKiri, logoKanan, ...rest }) => rest);
 
 // Aturan penilaian otomatis saat kehadiran di-set massal (scan foto / hadir semua):
