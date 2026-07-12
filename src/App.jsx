@@ -11,8 +11,8 @@ import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, signI
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 // --- IMPORT CONSTANTS, HELPERS, & PDF ---
-import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN } from './utils/constants';
-import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields } from './utils/helpers';
+import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN } from './utils/constants';
+import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding } from './utils/helpers';
 import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF } from './utils/pdfGenerator';
 
 // --- IMPORT KOMPONEN UI ---
@@ -26,7 +26,7 @@ import ChatBot from './components/layout/ChatBot';
 
 // --- IMPORT AI SERVICES ---
 // import { generateJournalSummary, predictGraduation, parseAisearchQuery } from './services/ai';
-import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData } from './services/aiAgent';
+import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet } from './services/aiAgent';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -69,6 +69,9 @@ export default function App() {
   const [visibleCount, setVisibleCount] = useState(50); 
   const [isCompressing, setIsCompressing] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isScanningAbsen, setIsScanningAbsen] = useState(false);
+  const [scanReview, setScanReview] = useState(null); // { groupName, rows, unmatchedNames } hasil scan lembar absen, menunggu konfirmasi
+  const [autoAssess, setAutoAssess] = useState(() => { try { return localStorage.getItem(STORAGE_KEY_AUTO_ASSESS) !== 'false'; } catch { return true; } });
   const [currentSlide, setCurrentSlide] = useState(0);
   
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
@@ -200,6 +203,7 @@ export default function App() {
     }
   }, [history]);
   useEffect(() => { safeSetItem(STORAGE_KEY_VIEW_SETTINGS, JSON.stringify(viewSettings)); if (viewSettings.theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [viewSettings]);
+  useEffect(() => { safeSetItem(STORAGE_KEY_AUTO_ASSESS, String(autoAssess)); }, [autoAssess]);
 
   // MEMOS
   const dynamicGroups = useMemo(() => ["Semua Kelompok", ...[...new Set(data.map(item => item.group))].sort()], [data]);
@@ -273,8 +277,12 @@ export default function App() {
     setData(prev => prev.some(item => item.id === cleanItem.id) ? prev.map(item => item.id === cleanItem.id ? cleanItem : item) : [cleanItem, ...prev]);
     if (user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(cleanItem.id)), cleanItem); }
   };
-  const handleStatusChange = (item) => updateKpmItem({ ...item, presence: !item.presence, understanding: !item.presence ? "Baik" : "-" });
-  const handleUnderstandingChange = (item, newVal) => updateKpmItem({ ...item, understanding: newVal });
+  // Toggle kehadiran manual mereset penilaian ke default, jadi penanda koreksi manual ikut dihapus
+  const handleStatusChange = (item) => updateKpmItem({ ...item, presence: !item.presence, understanding: !item.presence ? "Baik" : "-", understandingManual: false });
+  // Pendamping mengubah dropdown Pemahaman = koreksi manual; penilaian otomatis tidak boleh menimpanya lagi
+  const handleUnderstandingChange = (item, newVal) => updateKpmItem({ ...item, understanding: newVal, understandingManual: true });
+  // Nilai pemahaman saat kehadiran di-set massal: hormati koreksi manual, lalu aturan otomatis (jika aktif), lalu default lama
+  const massUnderstanding = (item, presence) => item.understandingManual === true ? item.understanding : (autoAssess ? deriveUnderstanding(item, presence) : (presence ? "Baik" : "-"));
   const saveNote = () => { const item = data.find(i => i.id === noteModal.kpmId); if (item) { updateKpmItem({ ...item, note: noteModal.text }); showToast("Catatan disimpan"); } closeNoteModal(); };
   const deleteNote = (item) => updateKpmItem({ ...item, note: "" });
   const saveEditedKPM = () => {
@@ -320,16 +328,101 @@ export default function App() {
       setIsScanning(false);
     }
   };
+  // Scan lembar DAFTAR HADIR (1-2 foto) -> AI baca kolom TTD -> modal review (tidak langsung commit)
+  const handleScanAbsen = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    if (filteredData.length === 0) { showAlert("Belum Ada KPM", "Pilih kelompok yang berisi KPM terlebih dahulu sebelum scan lembar absen."); return; }
+    setIsScanningAbsen(true);
+    try {
+      const dataUrls = [];
+      for (const f of files) dataUrls.push(await compressImage(f));
+      const rows = await extractAttendanceSheet(dataUrls, filteredData.map(k => k.name));
+      if (rows.length === 0) { showAlert("Tidak Terbaca", "Tidak ada baris daftar hadir yang terbaca di foto. Coba foto ulang dengan lebih terang dan seluruh tabel terlihat."); return; }
+
+      // Petakan tiap baris hasil baca ke KPM kelompok aktif: fuzzy nama dulu, lalu nomor urut
+      const rowByKpmId = new Map();
+      const unmatchedNames = [];
+      for (const row of rows) {
+        let target = null;
+        if (row.name) { const res = matchKpmByName(row.name, filteredData); if (res.match) target = res.match; }
+        if (!target && row.no && filteredData[row.no - 1]) target = filteredData[row.no - 1];
+        if (target) {
+          const prev = rowByKpmId.get(target.id);
+          // Baris dobel (foto tumpang tindih antar halaman): utamakan yang terbaca bertanda tangan
+          if (!prev || (row.signed && !prev.signed)) rowByKpmId.set(target.id, row);
+        } else if (row.name) {
+          unmatchedNames.push(row.name);
+        }
+      }
+
+      const reviewRows = filteredData.map(k => {
+        const row = rowByKpmId.get(k.id);
+        return {
+          id: k.id, name: k.name,
+          presence: row ? row.signed : k.presence,
+          needsCheck: !row || row.confidence === 'low',
+          reason: !row ? 'tidak terbaca di foto' : (row.confidence === 'low' ? 'tanda tangan samar' : null),
+          manual: k.understandingManual === true,
+          understanding: k.understanding || '-',
+          lansiaSingle: k.components?.lansia === 1,
+        };
+      });
+      setScanReview({ groupName: selectedGroup, rows: reviewRows, unmatchedNames });
+    } catch (err) {
+      showAlert("Scan Absen Gagal", err.message || "Gagal memproses foto lembar absen. Periksa koneksi internet Anda.");
+    } finally {
+      setIsScanningAbsen(false);
+    }
+  };
+
+  const toggleScanRow = (id) => setScanReview(prev => prev ? { ...prev, rows: prev.rows.map(r => r.id === id ? { ...r, presence: !r.presence } : r) } : prev);
+
+  // Tombol "Terapkan" di modal review: baru di sinilah data kehadiran ditulis (state + Firestore batch)
+  const applyScanReview = async () => {
+    if (!scanReview) return;
+    const rowById = new Map(scanReview.rows.map(r => [r.id, r]));
+    const updates = [];
+    const updatedData = data.map(item => {
+      const row = rowById.get(item.id);
+      if (!row) return item;
+      const understanding = massUnderstanding(item, row.presence);
+      if (item.presence === row.presence && item.understanding === understanding) return item;
+      const next = sanitizeForFirestore({ ...item, presence: row.presence, understanding });
+      updates.push(next);
+      return next;
+    });
+    setData(updatedData);
+    try {
+      if (user && db && updates.length > 0) {
+        const chunkSize = 400;
+        for (let i = 0; i < updates.length; i += chunkSize) {
+          const batch = writeBatch(db);
+          updates.slice(i, i + chunkSize).forEach(item => batch.set(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)), item));
+          await batch.commit();
+        }
+      }
+      const hadir = scanReview.rows.filter(r => r.presence).length;
+      showToast(`Hasil scan diterapkan: ${hadir} hadir, ${scanReview.rows.length - hadir} tidak hadir`);
+    } catch (e) {
+      console.error("Apply scan review error", e);
+      showAlert("Error", "Sebagian perubahan gagal tersimpan ke database. Periksa koneksi lalu coba lagi.");
+    } finally {
+      setScanReview(null);
+    }
+  };
+
   const handleComponentChange = (key, delta) => { setEditModal(prev => { const comps = prev.data.components || {}; const currentVal = comps[key] || 0; const newVal = Math.max(0, currentVal + delta); return { ...prev, data: { ...prev.data, components: { ...comps, [key]: newVal } } }; }); };
 
   const handleMarkAllPresent = () => { 
     if (filteredData.length === 0) return; 
     showConfirm("Konfirmasi Hadir Semua", "Hadirkan semua KPM di list ini?", async () => { 
-        const updatedData = data.map(item => { const isInFiltered = filteredData.some(f => f.id === item.id); if (isInFiltered && !item.presence) { return { ...item, presence: true, understanding: "Baik" }; } return item; });
+        const updatedData = data.map(item => { const isInFiltered = filteredData.some(f => f.id === item.id); if (isInFiltered && !item.presence) { return { ...item, presence: true, understanding: massUnderstanding(item, true) }; } return item; });
         setData(updatedData);
         if (user && db) {
             const batch = writeBatch(db);
-            filteredData.forEach(item => { if (!item.presence) { const newItem = { ...item, presence: true, understanding: "Baik" }; const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.set(ref, sanitizeForFirestore(newItem)); } });
+            filteredData.forEach(item => { if (!item.presence) { const newItem = { ...item, presence: true, understanding: massUnderstanding(item, true) }; const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.set(ref, sanitizeForFirestore(newItem)); } });
             await batch.commit();
         }
         closeModal(); showToast("Semua KPM ditandai Hadir");
@@ -737,14 +830,14 @@ export default function App() {
      if(user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), newHist); }
 
      const idSet = new Set(list.map(i => i.id));
-     setData(prev => prev.map(item => idSet.has(item.id) ? { ...item, presence: false, understanding: "-", note: "" } : item));
+     setData(prev => prev.map(item => idSet.has(item.id) ? { ...item, presence: false, understanding: "-", note: "", understandingManual: false } : item));
 
      if (user && db) {
          const batch = writeBatch(db);
          list.forEach(item => {
              if (item.presence || item.note) {
                  const docRef = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id));
-                 const cleanItem = { ...item, presence: false, understanding: "-", note: "" };
+                 const cleanItem = { ...item, presence: false, understanding: "-", note: "", understandingManual: false };
                  batch.set(docRef, sanitizeForFirestore(cleanItem));
              }
          });
@@ -817,6 +910,7 @@ export default function App() {
               textSizeBase={textSizeBase} textSizeSub={textSizeSub} renderComponentBadges={renderComponentBadges} handleUnderstandingChange={handleUnderstandingChange}
               openNoteModal={openNoteModal} openEditModal={openEditModal} handleProposeGraduation={handleProposeGraduation}
               handleDeleteKPM={handleDeleteKPM} visibleCount={visibleCount} filteredData={filteredData} mobileLoadMoreRef={mobileLoadMoreRef}
+              handleScanAbsen={handleScanAbsen} isScanningAbsen={isScanningAbsen} autoAssess={autoAssess} setAutoAssess={setAutoAssess}
            />
         )}
 
@@ -867,6 +961,63 @@ export default function App() {
               <div className="flex-1 w-full h-full p-2 sm:p-6"><iframe src={pdfPreviewUrl} className="w-full h-full rounded-xl shadow-2xl bg-white border-0"></iframe></div>
           </div>
       )}
+
+      {isScanningAbsen && (
+          <div className="fixed inset-0 z-[210] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-gray-800 w-full max-w-xs rounded-3xl p-8 shadow-2xl text-center animate-in zoom-in-95 duration-200">
+                  <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={36} />
+                  <p className="font-bold dark:text-white">Membaca lembar absen…</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">AI sedang memeriksa kolom tanda tangan satu per satu.</p>
+              </div>
+          </div>
+      )}
+
+      {scanReview && (() => {
+          const sortedRows = [...scanReview.rows].sort((a, b) => (b.needsCheck ? 1 : 0) - (a.needsCheck ? 1 : 0));
+          const hadir = scanReview.rows.filter(r => r.presence).length;
+          const perluCek = scanReview.rows.filter(r => r.needsCheck).length;
+          const previewNilai = (r) => r.manual ? r.understanding : (autoAssess ? (r.presence ? (r.lansiaSingle ? 'Kurang' : 'Baik') : 'Tidak Dapat Dinilai') : (r.presence ? 'Baik' : '-'));
+          return (
+          <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-gray-800 w-full sm:max-w-lg h-[92vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-200">
+                  <div className="p-5 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+                      <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 rounded-xl flex items-center justify-center shrink-0"><ScanLine size={22}/></div>
+                          <div className="flex-1 min-w-0">
+                              <h3 className="font-bold text-lg dark:text-white leading-tight">Review Hasil Scan Absen</h3>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{scanReview.groupName} — periksa dulu sebelum diterapkan</p>
+                          </div>
+                          <button onClick={() => setScanReview(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition shrink-0"><X size={18} className="dark:text-gray-300"/></button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">{hadir} hadir</span>
+                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">{scanReview.rows.length - hadir} tidak hadir</span>
+                          {perluCek > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 flex items-center gap-1"><AlertTriangle size={12}/> {perluCek} perlu dicek</span>}
+                      </div>
+                      {scanReview.unmatchedNames.length > 0 && (
+                          <p className="text-[11px] text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900 rounded-lg px-3 py-2 mt-2">Nama terbaca di foto tapi tidak cocok dengan KPM mana pun: {scanReview.unmatchedNames.join(', ')}</p>
+                      )}
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                      {sortedRows.map(r => (
+                          <div key={r.id} className={`flex items-center gap-3 p-3 rounded-xl border ${r.needsCheck ? 'border-yellow-300 dark:border-yellow-800 bg-yellow-50/60 dark:bg-yellow-900/10' : r.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-700'}`}>
+                              <button onClick={() => toggleScanRow(r.id)} className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${r.presence ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}>{r.presence ? <Check strokeWidth={3} size={20}/> : <X size={18}/>}</button>
+                              <div className="flex-1 min-w-0">
+                                  <p className="font-bold text-sm truncate text-gray-900 dark:text-white">{r.name}</p>
+                                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Nilai: <span className="font-bold">{previewNilai(r)}</span>{r.manual && <span className="text-blue-500"> · koreksi manual</span>}</p>
+                              </div>
+                              {r.needsCheck && <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400" title={r.reason || ''}>perlu cek</span>}
+                          </div>
+                      ))}
+                  </div>
+                  <div className="p-4 border-t border-gray-100 dark:border-gray-700 shrink-0 flex gap-3">
+                      <button onClick={() => setScanReview(null)} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-[0.98] transition">Batal</button>
+                      <button onClick={applyScanReview} className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition flex items-center justify-center gap-2"><CheckCheck size={18}/> Terapkan</button>
+                  </div>
+              </div>
+          </div>
+          );
+      })()}
 
       {importModalOpen && pendingImport && (
           <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
