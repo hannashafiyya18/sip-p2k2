@@ -2,7 +2,8 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw,
   History, CheckCheck, Save, Search, Check, Minus, AlertTriangle,
-  Camera, Image as ImageIcon, HelpCircle, ScanLine, Copy, Download, FileSpreadsheet
+  Camera, Image as ImageIcon, HelpCircle, ScanLine, Copy, Download, FileSpreadsheet,
+  ChevronDown, ImageOff
 } from 'lucide-react';
 
 // --- IMPORT FIREBASE ---
@@ -105,6 +106,7 @@ export default function App() {
   
   const [tempHistoryMeta, setTempHistoryMeta] = useState({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" });
   const [historyEditSearch, setHistoryEditSearch] = useState("");
+  const [historyMetaOpen, setHistoryMetaOpen] = useState(false); // accordion "Detail Sesi" di modal edit riwayat
 
   const [pendingImport, setPendingImport] = useState(null); 
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -471,6 +473,7 @@ export default function App() {
           tanggal: historyItem.date || ""
       });
       setHistoryEditSearch("");
+      setHistoryMetaOpen(false);
       setEditingHistory(historyItem);
   };
 
@@ -1113,48 +1116,60 @@ export default function App() {
                   <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch(""); }} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"><X size={20} className="text-gray-500 dark:text-gray-400"/></button>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900/50 p-2 flex flex-wrap gap-2 justify-center border-b border-gray-100 dark:border-gray-800">
-                  <button onClick={() => handleMarkAllTempPresent(true)} className="px-3 py-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200 rounded-lg text-xs font-bold hover:bg-green-200 dark:hover:bg-green-800 transition flex items-center gap-1"><CheckCheck size={14}/> Hadirkan Semua</button>
-                  <button onClick={handleMarkAllTempBaik} className="px-3 py-1.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200 rounded-lg text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-800 transition flex items-center gap-1"><CheckCircle size={14}/> Semua Baik</button>
-                  <button onClick={() => handleMarkAllTempPresent(false)} className="px-3 py-1.5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 rounded-lg text-xs font-bold hover:bg-red-200 dark:hover:bg-red-800 transition flex items-center gap-1"><X size={14}/> Kosongkan Semua</button>
+                  <button onClick={() => handleMarkAllTempPresent(true)} className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-bold hover:border-green-300 hover:text-green-700 dark:hover:text-green-400 transition flex items-center gap-1.5"><CheckCheck size={14} className="text-green-500"/> Hadirkan Semua</button>
+                  <button onClick={handleMarkAllTempBaik} className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-bold hover:border-blue-300 hover:text-blue-700 dark:hover:text-blue-400 transition flex items-center gap-1.5"><CheckCircle size={14} className="text-blue-500"/> Semua Baik</button>
+                  <button onClick={() => handleMarkAllTempPresent(false)} className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-bold hover:border-red-300 hover:text-red-600 dark:hover:text-red-400 transition flex items-center gap-1.5"><X size={14} className="text-red-400"/> Kosongkan Semua</button>
               </div>
               
-              {/* Form Edit Tempat, Materi, Pemateri & Foto (LAYOUT BARU) */}
-              <div className="p-4 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 shrink-0">
-                  <div className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-4">
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
-                          <div>
-                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tanggal</label>
-                              <input type="date" value={tempHistoryMeta.tanggal} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tanggal: e.target.value})} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" />
+              {/* DETAIL SESI (ACCORDION — default tertutup agar fokus ke daftar KPM) */}
+              <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 shrink-0">
+                  <div className="max-w-3xl mx-auto">
+                      <button onClick={() => setHistoryMetaOpen(v => !v)} className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-left">
+                          <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs font-bold text-gray-700 dark:text-gray-200 shrink-0">Detail Sesi</span>
+                              <span className="text-[11px] text-gray-400 truncate">{tempHistoryMeta.tanggal || editingHistory.date}{tempHistoryMeta.tempat ? ` · ${tempHistoryMeta.tempat}` : ''}</span>
+                              {!tempHistoryMeta.fotoKegiatan && (
+                                  <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"><ImageOff size={10}/> Belum ada foto</span>
+                              )}
                           </div>
-                          <div>
-                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tempat</label>
-                              <input type="text" value={tempHistoryMeta.tempat} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tempat: e.target.value})} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" placeholder="Isi Tempat..." />
-                          </div>
-                          <div>
-                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Materi / Sesi</label>
-                              <input type="text" value={tempHistoryMeta.materi} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, materi: e.target.value})} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" placeholder="Isi Materi..." />
-                          </div>
-                          <div>
-                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Pemateri</label>
-                              <input type="text" value={tempHistoryMeta.pemateri} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, pemateri: e.target.value})} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" placeholder="Isi Pemateri..." />
-                          </div>
-                      </div>
-                      
-                      {/* AREA FOTO KANAN (COMPACT) */}
-                      <div className="shrink-0 w-full sm:w-28 flex flex-col">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Foto</label>
-                          {tempHistoryMeta.fotoKegiatan ? (
-                              <div className="flex-1 w-full min-h-[34px] rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm group bg-white dark:bg-gray-800 relative">
-                                  <img src={tempHistoryMeta.fotoKegiatan} alt="Preview" className="w-full h-full object-cover absolute inset-0"/>
-                                  <button onClick={() => setTempHistoryMeta(prev => ({...prev, fotoKegiatan: null}))} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-md opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-md z-10" title="Hapus Foto"><X size={12}/></button>
+                          <ChevronDown size={16} className={`shrink-0 text-gray-400 transition-transform duration-300 ${historyMetaOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${historyMetaOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                          <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tanggal</label>
+                                  <input type="date" value={tempHistoryMeta.tanggal} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tanggal: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" />
                               </div>
-                          ) : (
-                              <label className="flex-1 w-full cursor-pointer flex items-center justify-center gap-1 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition text-gray-400 dark:text-gray-500 min-h-[34px] bg-gray-50/50 dark:bg-gray-900/50">
-                                  {isCompressing ? <Loader2 className="animate-spin" size={14}/> : <Camera size={14}/>}
-                                  <span className="text-[10px] font-bold leading-none">Upload</span>
-                                  <input type="file" accept="image/*" className="hidden" onChange={handleHistoryPhotoUpload} />
-                              </label>
-                          )}
+                              <div>
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tempat</label>
+                                  <input type="text" value={tempHistoryMeta.tempat} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tempat: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" placeholder="Isi Tempat..." />
+                              </div>
+                              <div className="sm:col-span-2">
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Materi / Sesi</label>
+                                  <input type="text" value={tempHistoryMeta.materi} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, materi: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" placeholder="Isi Materi..." />
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Pemateri</label>
+                                  <input type="text" value={tempHistoryMeta.pemateri} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, pemateri: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" placeholder="Isi Pemateri..." />
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Foto Dokumentasi</label>
+                                  {tempHistoryMeta.fotoKegiatan ? (
+                                      <div className="flex items-center gap-2">
+                                          <div className="w-16 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shrink-0"><img src={tempHistoryMeta.fotoKegiatan} alt="Preview" className="w-full h-full object-cover"/></div>
+                                          <label className="flex-1 cursor-pointer text-center text-xs font-bold py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition">Ganti<input type="file" accept="image/*" className="hidden" onChange={handleHistoryPhotoUpload} /></label>
+                                          <button onClick={() => setTempHistoryMeta(prev => ({...prev, fotoKegiatan: null}))} className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-red-500 hover:border-red-200 transition" title="Hapus Foto"><X size={14}/></button>
+                                      </div>
+                                  ) : (
+                                      <label className="w-full cursor-pointer flex items-center justify-center gap-2 border-2 border-dashed border-amber-300/70 dark:border-amber-700/60 rounded-xl hover:bg-amber-50/50 dark:hover:bg-amber-900/10 transition text-amber-600 dark:text-amber-400 py-2.5 bg-amber-50/30 dark:bg-transparent">
+                                          {isCompressing ? <Loader2 className="animate-spin" size={14}/> : <Camera size={14}/>}
+                                          <span className="text-xs font-bold leading-none">Unggah Bukti Foto</span>
+                                          <input type="file" accept="image/*" className="hidden" onChange={handleHistoryPhotoUpload} />
+                                      </label>
+                                  )}
+                              </div>
+                          </div>
                       </div>
                   </div>
               </div>
@@ -1167,13 +1182,13 @@ export default function App() {
                   </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 pt-3 max-w-3xl mx-auto w-full">
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                       {tempHistoryDetails.map((kpm, idx) => ({ kpm, idx })).filter(({ kpm }) => (kpm.name || "").toLowerCase().includes(historyEditSearch.toLowerCase())).map(({ kpm, idx }) => (
-                          <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl border ${kpm.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}>
-                              <button onClick={() => handleTempHistoryChange(idx, 'presence', !kpm.presence)} className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${kpm.presence ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-700 text-gray-300'}`}>{kpm.presence ? <Check strokeWidth={3} size={20}/> : <span className="text-xs font-bold">{idx + 1}</span>}</button>
-                              <div className="flex-1 min-w-0"><p className="font-bold text-sm truncate text-gray-900 dark:text-white">{kpm.name}</p><p className="text-[10px] text-gray-500">{kpm.group}</p></div>
-                              <div className="shrink-0 w-32">
-                                  <select value={kpm.understanding} onChange={(e) => handleTempHistoryChange(idx, 'understanding', e.target.value)} disabled={!kpm.presence} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-blue-500 dark:text-white disabled:opacity-50">
+                          <div key={idx} className={`flex items-center gap-2.5 py-1.5 px-2 rounded-xl border ${kpm.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}>
+                              <button onClick={() => handleTempHistoryChange(idx, 'presence', !kpm.presence)} className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${kpm.presence ? 'bg-green-500 text-white shadow-md shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-700 text-gray-300'}`}>{kpm.presence ? <Check strokeWidth={3} size={16}/> : <span className="text-[10px] font-bold">{idx + 1}</span>}</button>
+                              <p className="flex-1 min-w-0 font-bold text-[13px] truncate text-gray-900 dark:text-white">{kpm.name}</p>
+                              <div className="shrink-0 w-28">
+                                  <select value={kpm.understanding} onChange={(e) => handleTempHistoryChange(idx, 'understanding', e.target.value)} disabled={!kpm.presence} className="w-full text-[11px] p-1.5 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-blue-500 dark:text-white disabled:opacity-40">
                                       {UNDERSTANDING_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                                   </select>
                               </div>

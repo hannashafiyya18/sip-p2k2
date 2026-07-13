@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, ChevronDown, Loader2, Eye, Download, FileBadge, Filter, History, Pencil, Trash2, Archive, FileSpreadsheet, Calculator } from 'lucide-react';
+import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import { useReveal } from '../../hooks/useReveal';
 
@@ -16,6 +16,11 @@ export default function HistoryTab({
   isRekapOpen, setIsRekapOpen, rekapMonth, rekapYear, setRekapYear, setShowRekapMonthModal, handleBuildRekap
 }) {
   const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
+  // "2026-06-11" -> "11 Jun 2026" (lebih mudah dipindai daripada format ISO)
+  const formatTanggal = (iso) => {
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 items-start">
@@ -145,27 +150,36 @@ export default function HistoryTab({
         <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredHistory.map(h => {
                 const pct = h.stats.total ? Math.round((h.stats.present / h.stats.total) * 100) : 0;
+                const hasFoto = !!h.fotoKegiatan;
                 return (
-                <div key={h.id} role="button" tabIndex={0} onClick={() => handleEditHistory(h)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditHistory(h); } }} className={`p-5 rounded-2xl ${cardColor} shadow-sm border-l-4 border-l-blue-500 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg flex flex-col justify-between cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}>
-                    <div>
-                        <div className="flex justify-between items-start mb-3 gap-3">
-                            <div className="min-w-0"><div className="text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-md inline-block mb-2">{h.date}</div><h3 className={`font-bold text-base ${textColor}`}>{h.groupName}</h3></div>
-                            <div className="text-right shrink-0"><div className="flex items-baseline gap-0.5 justify-end"><span className={`text-2xl font-bold ${textColor}`}>{h.stats.present}</span><span className="text-xs text-gray-400">/{h.stats.total}</span></div><span className="text-[10px] text-gray-400 block">Hadir</span></div>
+                <div key={h.id} role="button" tabIndex={0} onClick={() => handleEditHistory(h)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditHistory(h); } }} className={`group p-5 rounded-2xl ${cardColor} shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-900 flex flex-col gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}>
+                    <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
+                            <h3 className={`font-bold text-base leading-tight truncate ${textColor}`}>{h.groupName}</h3>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 flex items-center gap-1.5"><CalendarDays size={12} className="shrink-0"/> {formatTanggal(h.date)}</p>
                         </div>
-                        <p className="text-xs text-gray-500 border-t border-dashed pt-3 dark:border-gray-700 mb-3 line-clamp-2">{h.materi}</p>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(h.id); }} className="shrink-0 p-2 -mt-1 -mr-1 rounded-lg text-gray-300 dark:text-gray-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Hapus Riwayat" aria-label="Hapus Riwayat"><Trash2 size={15} /></button>
                     </div>
 
+                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2rem]">{h.materi || '—'}</p>
+
                     <div>
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                                <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
-                            </div>
-                            <span className="text-[10px] font-bold text-gray-400 shrink-0 tabular-nums">{pct}%</span>
+                        <div className="flex items-baseline justify-between mb-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Kehadiran</span>
+                            <span className={`text-sm font-bold tabular-nums ${textColor}`}>{h.stats.present}<span className="text-gray-400 font-medium text-xs">/{h.stats.total}</span></span>
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); handleEditHistory(h); }} className="flex-1 py-2 bg-blue-50 text-blue-600 dark:bg-blue-900 dark:text-blue-200 rounded-lg text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-800 transition flex items-center justify-center gap-1.5"><Pencil size={14} /> Edit</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(h.id); }} className="py-2 px-3 bg-red-50 text-red-600 dark:bg-red-900 dark:text-red-200 rounded-lg text-xs font-bold hover:bg-red-100 dark:hover:bg-red-800 transition flex items-center justify-center" title="Hapus Riwayat" aria-label="Hapus Riwayat"><Trash2 size={14} /></button>
+                        <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                            <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
                         </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
+                        {hasFoto ? (
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><Camera size={11}/> Foto ada</span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"><ImageOff size={11}/> Belum ada foto</span>
+                        )}
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors flex items-center gap-0.5">Ketuk untuk edit <ChevronRight size={13}/></span>
                     </div>
                 </div>
                 );
