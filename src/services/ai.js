@@ -6,10 +6,10 @@
  * @param {string} prompt
  * @param {Array<{mimeType: string, data: string}>} [images] gambar (base64 tanpa prefix data URL) untuk permintaan multimodal
  */
-// gemini-2.5-flash didahulukan: kualitasnya memadai untuk OCR & chat, tapi ~6-9x lebih
-// cepat daripada gemini-3.5-flash (model thinking, ~20 detik/permintaan). Di jaringan
-// seluler permintaan selambat itu sering diputus sebelum selesai.
-const MODELS = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.0-flash"];
+// Model "lite": cepat (~500ms) dan tersedia untuk API key baru. Model flash penuh
+// (gemini-2.5-flash) diblokir Google untuk key baru, 2.0-flash kena kuota, 3.5-flash
+// ~30 detik. Daftar ini dicerminkan di whitelist server (lib/geminiForward.js).
+const MODELS = ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"];
 
 // Batas tunggu per model; tanpa ini sebuah permintaan yang menggantung bisa menahan
 // seluruh proses tanpa pernah mencoba model cadangan.
