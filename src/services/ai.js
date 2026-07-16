@@ -1,4 +1,6 @@
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+// Panggilan Gemini lewat proxy server sendiri (/api/gemini), BUKAN langsung ke Google.
+// API key kini tersimpan di server (env GEMINI_API_KEY) dan tidak pernah ikut ke bundle
+// browser. Logika fallback model, timeout, dan pesan error tetap di klien.
 
 /**
  * @param {string} prompt
@@ -24,7 +26,7 @@ export const callGemini = async (prompt, images = []) => {
     if (img && img.data) parts.push({ inline_data: { mime_type: img.mimeType || 'image/jpeg', data: img.data } });
   }
 
-  const body = JSON.stringify({
+  const payload = {
     contents: [{ parts }],
     safetySettings: [
       { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -32,7 +34,7 @@ export const callGemini = async (prompt, images = []) => {
       { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
       { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
     ]
-  });
+  };
 
   const attempts = [];
 
@@ -44,8 +46,8 @@ export const callGemini = async (prompt, images = []) => {
     const timer = setTimeout(() => controller.abort(), Math.min(TIMEOUT_MS, sisaWaktu));
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal }
+        '/api/gemini',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, payload }), signal: controller.signal }
       );
 
       if (!response.ok) {
