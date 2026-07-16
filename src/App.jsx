@@ -124,9 +124,10 @@ export default function App() {
   const scrollContainerRef = useRef(null); 
   const prevSelectedGroupRef = useRef(selectedGroup);
   const quotaWarnedRef = useRef(false);
-  
+  const toastTimerRef = useRef(null);
+
   // MODALS
-  const [toast, setToast] = useState({ show: false, message: '' });
+  const [toast, setToast] = useState({ show: false, message: '', variant: 'success' });
   const [modal, setModal] = useState({ isOpen: false, type: 'alert', title: '', message: '', onConfirm: null });
   const [noteModal, setNoteModal] = useState({ isOpen: false, kpmId: null, kpmName: '', text: '' });
   const [editModal, setEditModal] = useState({ isOpen: false, data: null });
@@ -194,7 +195,7 @@ export default function App() {
     const savedSlim = safeSetItem(STORAGE_KEY_HISTORY, JSON.stringify(stripHeavyHistoryFields(history)));
     if (!quotaWarnedRef.current) {
       quotaWarnedRef.current = true;
-      showToast(savedSlim ? "Memori lokal penuh — cadangan riwayat disimpan tanpa foto" : "Memori lokal penuh — riwayat tidak tersalin ke perangkat");
+      showToast(savedSlim ? "Penyimpanan perangkat penuh — foto riwayat lama tak disimpan di sini. Datanya tetap aman di akun Anda." : "Penyimpanan perangkat penuh — riwayat tak tersalin ke perangkat ini. Datanya tetap aman di akun Anda.", 'warning');
     }
   }, [history]);
   useEffect(() => { safeSetItem(STORAGE_KEY_VIEW_SETTINGS, JSON.stringify(viewSettings)); if (viewSettings.theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [viewSettings]);
@@ -257,7 +258,12 @@ export default function App() {
   }, [filteredData.length, visibleCount]);
 
   // UI ACTIONS
-  const showToast = (message) => { setToast({ show: true, message }); setTimeout(() => setToast({ show: false, message: '' }), 3000); };
+  const showToast = (message, variant = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ show: true, message, variant });
+    // Peringatan diberi waktu baca lebih lama daripada notifikasi sukses biasa.
+    toastTimerRef.current = setTimeout(() => setToast({ show: false, message: '', variant: 'success' }), variant === 'warning' ? 5500 : 3000);
+  };
   const showAlert = (title, message) => setModal({ isOpen: true, type: 'alert', title, message, onConfirm: null, variant: 'danger' });
   const showConfirm = (title, message, onConfirm, variant = 'danger') => setModal({ isOpen: true, type: 'confirm', title, message, onConfirm, variant });
   const closeModal = () => setModal({ ...modal, isOpen: false });
@@ -1026,7 +1032,22 @@ export default function App() {
   const textSizeSub = isCompact ? 'text-[10px]' : 'text-xs';
 
   // Modal & toast dipakai di layar utama maupun layar penyelamatan sesi Tamu.
-  const toastNode = toast.show && (<div className="fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-gray-900 text-white dark:bg-white dark:text-black rounded-full shadow-2xl flex items-center gap-3 z-[100] animate-in slide-in-from-top-4 fade-in"><CheckCircle size={18} className="text-green-400 dark:text-green-600" /><span className="font-bold text-sm">{toast.message}</span></div>);
+  const toastNode = toast.show && (() => {
+    const isWarn = toast.variant === 'warning';
+    const ToastIcon = isWarn ? AlertTriangle : CheckCircle;
+    const chip = isWarn
+      ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
+      : 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400';
+    const ring = isWarn ? 'ring-amber-300/50 dark:ring-amber-500/25' : 'ring-black/5 dark:ring-white/10';
+    return (
+      <div className="fixed top-4 inset-x-0 z-[100] flex justify-center px-3 pointer-events-none animate-in slide-in-from-top-4 fade-in duration-300">
+        <div className={`pointer-events-auto flex items-center gap-3 w-full max-w-sm rounded-2xl px-4 py-3 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-gray-200/70 dark:border-gray-700/70 shadow-xl shadow-black/10 ring-1 ${ring}`}>
+          <span className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${chip}`}><ToastIcon size={18} strokeWidth={2.5} /></span>
+          <p className="text-sm font-semibold leading-snug text-gray-800 dark:text-gray-100">{toast.message}</p>
+        </div>
+      </div>
+    );
+  })();
   const modalNode = modal.isOpen && (
       <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center">
