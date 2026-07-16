@@ -189,13 +189,16 @@ export default function App() {
 
   useEffect(() => { safeSetItem(STORAGE_KEY_DATA, JSON.stringify(data)); }, [data]);
   useEffect(() => {
-    if (safeSetItem(STORAGE_KEY_HISTORY, JSON.stringify(history))) return;
-    // Kuota localStorage penuh: simpan cadangan lokal tanpa foto/logo agar aplikasi tetap jalan.
-    // Versi lengkap (dengan foto) tetap tersimpan di Firestore saat login.
-    const savedSlim = safeSetItem(STORAGE_KEY_HISTORY, JSON.stringify(stripHeavyHistoryFields(history)));
+    // localStorage hanya cache teks offline; foto riwayat hidup di Firestore (saat login)
+    // dan dari sanalah PDF/tampilan mengambilnya. Foto base64 sangat besar dan cepat
+    // menembus kuota localStorage (~5MB), jadi TIDAK pernah disimpan ke sini — inilah yang
+    // membuat notice "penyimpanan penuh" muncul berulang meski data KPM sudah dirapikan.
+    const slim = JSON.stringify(stripHeavyHistoryFields(history));
+    if (safeSetItem(STORAGE_KEY_HISTORY, slim)) return;
+    // Versi ringan pun gagal = perangkat benar-benar penuh (jarang). Data tetap aman di akun.
     if (!quotaWarnedRef.current) {
       quotaWarnedRef.current = true;
-      showToast(savedSlim ? "Penyimpanan perangkat penuh — foto riwayat lama tak disimpan di sini. Datanya tetap aman di akun Anda." : "Penyimpanan perangkat penuh — riwayat tak tersalin ke perangkat ini. Datanya tetap aman di akun Anda.", 'warning');
+      showToast("Penyimpanan perangkat hampir penuh. Data Anda tetap aman di akun — hanya cadangan offline yang tak tersimpan.", 'warning');
     }
   }, [history]);
   useEffect(() => { safeSetItem(STORAGE_KEY_VIEW_SETTINGS, JSON.stringify(viewSettings)); if (viewSettings.theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [viewSettings]);
