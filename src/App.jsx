@@ -1065,21 +1065,27 @@ export default function App() {
   );
 
   const kartuLayar = "w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-7 text-center";
-  const logoLayar = (
-    <div className="w-14 h-14 mx-auto bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/25 ring-1 ring-white/20">
-      <FileText size={26} strokeWidth={2.5} />
-    </div>
-  );
 
   // Belum ada sesi: aplikasi mensyaratkan akun Google agar data tersinkron antar perangkat.
+  // Layar hero: latar navy + aurora (blob cahaya melayang perlahan), kartu login kaca.
   if (auth && !user) return (
-    <div className={`min-h-screen font-sans ${themeClass} ${bgColor} flex items-center justify-center p-5`}>
-      <div className={kartuLayar}>
-        {logoLayar}
-        <h1 className="font-bold text-xl mt-4 tracking-tight text-gray-900 dark:text-white">SIP-P2K2</h1>
-        <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mt-1">Pendamping PKH</p>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 leading-relaxed">Login dengan akun Google Anda. Data tersimpan di akun tersebut dan otomatis tersinkron antara HP dan laptop.</p>
-        <button onClick={doGoogleLogin} className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2">
+    <div className="min-h-screen font-sans hero-bg relative overflow-hidden flex items-center justify-center p-5">
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <span className="hero-blob hero-blob-1"></span>
+        <span className="hero-blob hero-blob-2"></span>
+        <span className="hero-blob hero-blob-3"></span>
+        <span className="hero-blob hero-blob-4"></span>
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, transparent 40%, rgba(6,9,20,.55) 100%)' }} />
+      </div>
+      <div className="relative w-full max-w-sm rounded-3xl border border-white/15 bg-white/[0.07] backdrop-blur-2xl p-7 text-center shadow-2xl shadow-black/50">
+        <div className="relative w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-white bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-lg shadow-blue-600/40">
+          <span className="hero-ring" aria-hidden="true"></span>
+          <FileText size={26} strokeWidth={2.5} />
+        </div>
+        <h1 className="font-bold text-2xl mt-4 tracking-tight text-white">SIP-P2K2</h1>
+        <p className="text-xs font-bold text-blue-300 mt-1 tracking-wide">Pendamping PKH</p>
+        <p className="text-sm text-white/70 mt-4 leading-relaxed">Login dengan akun Google Anda. Data tersimpan di akun tersebut dan otomatis tersinkron antara HP dan laptop.</p>
+        <button onClick={doGoogleLogin} className="w-full mt-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-sm hover:from-blue-500 hover:to-indigo-500 active:scale-[0.98] shadow-lg shadow-blue-600/40 transition flex items-center justify-center gap-2">
           <LogIn size={17} /> Login dengan Google
         </button>
       </div>
