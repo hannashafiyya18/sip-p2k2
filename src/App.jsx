@@ -3,12 +3,12 @@ import {
   CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw,
   History, CheckCheck, Save, Search, Check, Minus, AlertTriangle,
   Camera, Image as ImageIcon, HelpCircle, ScanLine, Copy, Download, FileSpreadsheet,
-  ChevronDown, ImageOff
+  ChevronDown, ImageOff, LogIn, UserX, CloudUpload
 } from 'lucide-react';
 
 // --- IMPORT FIREBASE ---
 import { auth, db, appId } from './config/firebase';
-import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "firebase/auth";
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 // --- IMPORT CONSTANTS, HELPERS, & PDF ---
@@ -50,6 +50,9 @@ export default function App() {
   // STATE MANAGEMENT
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  // Menandai snapshot pertama dari Firestore sudah tiba. Dipakai layar penyelamatan sesi
+  // Tamu agar tidak menyimpulkan "tidak ada data" saat datanya sebenarnya masih dimuat.
+  const [cloudLoaded, setCloudLoaded] = useState(false);
   const [viewSettings, setViewSettings] = useState(() => { try { const saved = localStorage.getItem(STORAGE_KEY_VIEW_SETTINGS); return saved ? JSON.parse(saved) : { theme: 'light', density: 'normal' }; } catch { return { theme: 'light', density: 'normal' }; } });
   const [showViewMenu, setShowViewMenu] = useState(false); 
   const [data, setData] = useState([]);
@@ -158,32 +161,14 @@ export default function App() {
         return;
     }
 
-    // 2. Gunakan onAuthStateChanged sebagai penentu utama (Single Source of Truth)
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        if (currentUser) {
-            // Jika sebelumnya sudah ada sesi (Google atau Tamu), gunakan sesi tersebut
-            setUser(currentUser);
-        } else {
-            // Cek apakah ada token khusus dari window
-            if (typeof window !== 'undefined' && typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) { 
-                try { 
-                    await signInWithCustomToken(auth, window.__initial_auth_token); 
-                } catch (e) { 
-                    console.warn("Custom token failed", e); 
-                    // Fallback jika token gagal
-                    await signInAnonymously(auth);
-                } 
-            } else {
-                // Jika benar-benar baru pertama kali buka, buat sesi tamu baru
-                try {
-                    await signInAnonymously(auth);
-                } catch (e) {
-                    console.error("Gagal membuat sesi anonim", e);
-                }
-            }
-        }
-        // Matikan loading HANYA setelah pengecekan selesai
-        setLoadingAuth(false); 
+    // 2. Gunakan onAuthStateChanged sebagai penentu utama (Single Source of Truth).
+    // Sesi Tamu (anonim) TIDAK lagi dibuat: data terikat per-UID, sehingga tiap perangkat
+    // mendapat lemari sendiri dan tidak pernah tersinkron. Aplikasi ini mensyaratkan login
+    // Google. Sesi anonim lama tetap diterima di sini agar datanya tidak terlantar —
+    // penanganannya ada di layar penyelamatan (lihat GuestRescueScreen di bawah).
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        setUser(currentUser || null);
+        setLoadingAuth(false);
     });
 
     return () => unsubscribe();
@@ -191,8 +176,9 @@ export default function App() {
 
   useEffect(() => {
     if (user && db) {
+        setCloudLoaded(false);
         const qData = query(collection(db, `artifacts/${appId}/users/${user.uid}/kpm_data`));
-        const unsubData = onSnapshot(qData, (snapshot) => { const items = []; snapshot.forEach(doc => items.push(doc.data())); setData(items.length > 0 ? items.sort((a,b) => a.name.localeCompare(b.name)) : []); });
+        const unsubData = onSnapshot(qData, (snapshot) => { const items = []; snapshot.forEach(doc => items.push(doc.data())); setData(items.length > 0 ? items.sort((a,b) => a.name.localeCompare(b.name)) : []); setCloudLoaded(true); });
         const qHist = query(collection(db, `artifacts/${appId}/users/${user.uid}/history`));
         const unsubHist = onSnapshot(qHist, (snapshot) => { const items = []; snapshot.forEach(doc => items.push(doc.data())); setHistory(items.sort((a,b) => b.id - a.id)); });
         return () => { unsubData(); unsubHist(); };
@@ -970,6 +956,86 @@ export default function App() {
   const textSizeBase = isCompact ? 'text-sm' : 'text-base';
   const textSizeSub = isCompact ? 'text-[10px]' : 'text-xs';
 
+  // Modal & toast dipakai di layar utama maupun layar penyelamatan sesi Tamu.
+  const toastNode = toast.show && (<div className="fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-gray-900 text-white dark:bg-white dark:text-black rounded-full shadow-2xl flex items-center gap-3 z-[100] animate-in slide-in-from-top-4 fade-in"><CheckCircle size={18} className="text-green-400 dark:text-green-600" /><span className="font-bold text-sm">{toast.message}</span></div>);
+  const modalNode = modal.isOpen && (
+      <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${modal.variant === 'primary' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>{modal.variant === 'primary' ? <HelpCircle size={32}/> : <AlertTriangle size={32}/>}</div>
+              <h3 className="font-bold text-lg mb-2 dark:text-white">{modal.title}</h3><p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{modal.message}</p>
+              <div className="flex gap-3">
+                  <button onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-[0.98] transition">Batal</button>
+                  {modal.type === 'confirm' && (<button onClick={() => { modal.onConfirm(); closeModal(); }} className={`flex-1 py-3 rounded-xl font-bold text-white shadow-lg active:scale-[0.98] transition ${modal.variant === 'primary' ? 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-700' : 'bg-red-600 shadow-red-600/20 hover:bg-red-700'}`}>Ya, Lanjutkan</button>)}
+              </div>
+          </div>
+      </div>
+  );
+
+  const kartuLayar = "w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-7 text-center";
+  const logoLayar = (
+    <div className="w-14 h-14 mx-auto bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/25 ring-1 ring-white/20">
+      <FileText size={26} strokeWidth={2.5} />
+    </div>
+  );
+
+  // Belum ada sesi: aplikasi mensyaratkan akun Google agar data tersinkron antar perangkat.
+  if (auth && !user) return (
+    <div className={`min-h-screen font-sans ${themeClass} ${bgColor} flex items-center justify-center p-5`}>
+      <div className={kartuLayar}>
+        {logoLayar}
+        <h1 className="font-bold text-xl mt-4 tracking-tight text-gray-900 dark:text-white">SIP-P2K2</h1>
+        <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mt-1">Pendamping PKH</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 leading-relaxed">Login dengan akun Google Anda. Data tersimpan di akun tersebut dan otomatis tersinkron antara HP dan laptop.</p>
+        <button onClick={doGoogleLogin} className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2">
+          <LogIn size={17} /> Login dengan Google
+        </button>
+      </div>
+      {modalNode}
+      {toastNode}
+    </div>
+  );
+
+  // Sesi Tamu lama (dari versi sebelumnya). Mode Tamu sudah tidak dibuat lagi, tapi sesi yang
+  // terlanjur ada tidak boleh dibuang diam-diam: datanya tersimpan di UID anonim dan hanya
+  // bisa diselamatkan dari sini.
+  if (auth && user?.isAnonymous) {
+    const adaData = data.length > 0 || history.length > 0;
+    return (
+      <div className={`min-h-screen font-sans ${themeClass} ${bgColor} flex items-center justify-center p-5`}>
+        <div className={kartuLayar}>
+          {!cloudLoaded ? (
+            <>
+              <Loader2 className="animate-spin text-blue-600 mx-auto" size={30} />
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">Memeriksa data sesi Tamu…</p>
+            </>
+          ) : (
+            <>
+              <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center ${adaData ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-800'}`}>
+                {adaData ? <CloudUpload size={26} /> : <UserX size={26} />}
+              </div>
+              <h1 className="font-bold text-lg mt-4 tracking-tight text-gray-900 dark:text-white">{adaData ? 'Selamatkan Data Mode Tamu' : 'Mode Tamu Dihentikan'}</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-3 leading-relaxed">
+                {adaData
+                  ? <>Perangkat ini masih memakai Mode Tamu, yang datanya tidak tersinkron. Ditemukan <b className="text-gray-700 dark:text-gray-200">{data.length} data KPM</b> dan <b className="text-gray-700 dark:text-gray-200">{history.length} riwayat</b> di sini. Login untuk memindahkan semuanya ke akun Google Anda.</>
+                  : <>Perangkat ini memakai Mode Tamu yang sudah tidak didukung. Tidak ada data yang tersimpan di sini, jadi tidak ada yang hilang. Silakan login untuk melanjutkan.</>}
+              </p>
+              <button onClick={handleLogin} className="w-full mt-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-[0.98] shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2">
+                <LogIn size={17} /> {adaData ? 'Login & Pindahkan Data' : 'Login dengan Google'}
+              </button>
+              {adaData && (
+                <button onClick={handleBackupData} className="w-full mt-2 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold text-xs hover:bg-gray-200 dark:hover:bg-gray-700 transition flex items-center justify-center gap-2">
+                  <Download size={15} /> Unduh Cadangan Dulu
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        {modalNode}
+        {toastNode}
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen font-sans ${themeClass} ${bgColor} text-sm transition-colors duration-300 pb-24 md:pb-6`}>
       
@@ -1040,7 +1106,7 @@ export default function App() {
       <ChatBot stats={stats} dynamicGroups={dynamicGroups} onAgentCommand={handleAgentCommand} />
 
       {/* --- LINGERING MODALS & POP-UPS --- */}
-      {toast.show && (<div className="fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 bg-gray-900 text-white dark:bg-white dark:text-black rounded-full shadow-2xl flex items-center gap-3 z-[100] animate-in slide-in-from-top-4 fade-in"><CheckCircle size={18} className="text-green-400 dark:text-green-600" /><span className="font-bold text-sm">{toast.message}</span></div>)}
+      {toastNode}
 
       {pdfPreviewUrl && (
           <div className="fixed inset-0 z-[300] bg-gray-900/90 backdrop-blur-sm flex flex-col animate-in fade-in">
@@ -1523,18 +1589,7 @@ export default function App() {
           </div>
       )}
 
-      {modal.isOpen && (
-          <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
-              <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center">
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${modal.variant === 'primary' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>{modal.variant === 'primary' ? <HelpCircle size={32}/> : <AlertTriangle size={32}/>}</div>
-                  <h3 className="font-bold text-lg mb-2 dark:text-white">{modal.title}</h3><p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{modal.message}</p>
-                  <div className="flex gap-3">
-                      <button onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-[0.98] transition">Batal</button>
-                      {modal.type === 'confirm' && (<button onClick={() => { modal.onConfirm(); closeModal(); }} className={`flex-1 py-3 rounded-xl font-bold text-white shadow-lg active:scale-[0.98] transition ${modal.variant === 'primary' ? 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-700' : 'bg-red-600 shadow-red-600/20 hover:bg-red-700'}`}>Ya, Lanjutkan</button>)}
-                  </div>
-              </div>
-          </div>
-      )}
+      {modalNode}
     </div>
   );
 }
