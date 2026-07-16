@@ -4,7 +4,7 @@ import {
   ChevronDown, Grid, Plus, CheckSquare, Archive, Trash2, Settings,
   Camera, Upload, Loader2, Eye, Download, Check, StickyNote, Edit2,
   CheckCheck, GraduationCap, Users, X,
-  Calendar, MapPin, BookOpen, User, Image as ImageIcon, ScanLine, Sparkles
+  Calendar, MapPin, BookOpen, User, Image as ImageIcon, ScanLine, Sparkles, CopyX
 } from 'lucide-react';
 import { PKH_MODULES, UNDERSTANDING_LEVELS } from '../../utils/constants';
 import { formatRupiah, calculateTotalAid } from '../../utils/helpers';
@@ -25,7 +25,7 @@ export default function InputTab({
   textSizeBase, textSizeSub, renderComponentBadges, handleUnderstandingChange,
   openNoteModal, openEditModal, handleProposeGraduation, handleDeleteKPM,
   visibleCount, filteredData, mobileLoadMoreRef,
-  handleScanAbsen, isScanningAbsen, autoAssess, setAutoAssess
+  handleScanAbsen, isScanningAbsen, autoAssess, setAutoAssess, handleFindDuplicates
 }) {
   const listRef = useReveal({ deps: [selectedGroup], stagger: 0.04, y: 14, max: 12 });
   const [identityOpen, setIdentityOpen] = React.useState(false);
@@ -144,6 +144,10 @@ export default function InputTab({
                                   <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Pulihkan Data</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Impor file backup</p></div>
                                   <input type="file" accept=".json,application/json" className="hidden" onChange={(e) => { handleRestoreFile(e); setShowToolsMenu(false); }} />
                               </label>
+                              <button onClick={() => { handleFindDuplicates(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 active:scale-[0.98] transition text-left">
+                                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"><CopyX size={18} /></div>
+                                  <div className="min-w-0"><p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">Bersihkan Data Ganda</p><p className="text-[11px] text-gray-400 dark:text-gray-500">Cari KPM dobel lalu periksa</p></div>
+                              </button>
                               <div className="border-t border-gray-100 dark:border-gray-700 mt-2 pt-2">
                                   <button onClick={() => { handleDeleteAllData(); setShowToolsMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98] transition text-left">
                                       <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"><Trash2 size={18} /></div>

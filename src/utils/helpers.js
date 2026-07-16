@@ -38,6 +38,65 @@ export const deriveUnderstanding = (kpm, presence = kpm.presence) => {
   return "Baik";
 };
 
+// --- DETEKSI KPM GANDA ---
+// ID KPM dibuat dari Date.now() saat import/tambah, bukan dari identitas orangnya.
+// Akibatnya file yang sama diimpor dua kali, atau data dari dua perangkat digabung,
+// menghasilkan dokumen berbeda untuk orang yang sama.
+
+const isNikValid = (v) => /^\d{16}$/.test(String(v || '').replace(/\D/g, ''));
+const normNama = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Skor kelengkapan data: dipakai memilih kartu mana yang sebaiknya dipertahankan. */
+export const scoreKpmCompleteness = (k) => {
+  let score = 0;
+  if (isNikValid(k.nik)) score += 3;
+  if (String(k.noKK || '').replace(/\D/g, '').length === 16) score += 2;
+  if (k.address && k.address !== '-') score += 1;
+  if (k.components && Object.keys(k.components).length > 0) score += 2;
+  if (k.bpnt) score += 1;
+  if (k.note) score += 1;
+  if (k.graduationStatus) score += 1;
+  for (const f of ['desa', 'kecamatan', 'kabupaten', 'provinsi']) if (k[f] && k[f] !== '-') score += 0.25;
+  return score;
+};
+
+/**
+ * Kelompokkan KPM yang merujuk orang yang sama.
+ * Kunci utama NIK (paling andal); cadangannya nama+kelompok — ini ditandai
+ * needsCheck karena dua orang bisa saja benar-benar bernama sama.
+ * @returns {Array<{key: string, by: 'nik'|'nama', needsCheck: boolean, keep: object, remove: object[]}>}
+ */
+export const findDuplicateKpm = (data) => {
+  const buckets = new Map();
+  for (const k of data || []) {
+    if (!k || !k.name) continue;
+    const nik = String(k.nik || '').replace(/\D/g, '');
+    const key = isNikValid(nik) ? `nik:${nik}` : `nama:${normNama(k.name)}|${normNama(k.group)}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(k);
+  }
+
+  const clusters = [];
+  for (const [key, items] of buckets) {
+    if (items.length < 2) continue;
+    // Pertahankan yang datanya paling lengkap; seri -> yang hadir; seri lagi -> yang pertama
+    const sorted = [...items].sort((a, b) => {
+      const d = scoreKpmCompleteness(b) - scoreKpmCompleteness(a);
+      if (d !== 0) return d;
+      if (a.presence !== b.presence) return a.presence ? -1 : 1;
+      return 0;
+    });
+    clusters.push({
+      key,
+      by: key.startsWith('nik:') ? 'nik' : 'nama',
+      needsCheck: !key.startsWith('nik:'),
+      keep: sorted[0],
+      remove: sorted.slice(1),
+    });
+  }
+  return clusters;
+};
+
 export const sanitizeForFirestore = (obj) => {
   if (obj === null || obj === undefined) return null;
   if (Array.isArray(obj)) return obj.map(item => sanitizeForFirestore(item));

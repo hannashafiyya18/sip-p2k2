@@ -3,7 +3,7 @@ import {
   CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw,
   History, CheckCheck, Save, Search, Check, Minus, AlertTriangle,
   Camera, Image as ImageIcon, HelpCircle, ScanLine, Copy, Download, FileSpreadsheet,
-  ChevronDown, ImageOff, LogIn, UserX, CloudUpload
+  ChevronDown, ImageOff, LogIn, UserX, CloudUpload, CopyX
 } from 'lucide-react';
 
 // --- IMPORT FIREBASE ---
@@ -13,7 +13,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } fro
 
 // --- IMPORT CONSTANTS, HELPERS, & PDF ---
 import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN } from './utils/constants';
-import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding } from './utils/helpers';
+import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding, findDuplicateKpm } from './utils/helpers';
 import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF } from './utils/pdfGenerator';
 import { buildRekapKecamatan, rekapRowValues, downloadRekapXLSX } from './utils/rekapGenerator';
 
@@ -111,7 +111,8 @@ export default function App() {
   const [historyEditSearch, setHistoryEditSearch] = useState("");
   const [historyMetaOpen, setHistoryMetaOpen] = useState(false); // accordion "Detail Sesi" di modal edit riwayat
 
-  const [pendingImport, setPendingImport] = useState(null); 
+  const [dedupReview, setDedupReview] = useState(null);
+  const [pendingImport, setPendingImport] = useState(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
@@ -149,7 +150,7 @@ export default function App() {
     if (!auth) {
         setLoadingAuth(false);
         try {
-            const savedData = localStorage.getItem(STORAGE_KEY_DATA); 
+            const savedData = localStorage.getItem(STORAGE_KEY_DATA);
             setData(savedData ? (Array.isArray(JSON.parse(savedData)) ? JSON.parse(savedData) : []) : []);
             const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY); 
             setHistory(savedHistory ? (Array.isArray(JSON.parse(savedHistory)) ? JSON.parse(savedHistory) : []) : []);
@@ -387,6 +388,39 @@ export default function App() {
 
   const toggleScanRow = (id) => setScanReview(prev => prev ? { ...prev, rows: prev.rows.map(r => r.id === id ? { ...r, presence: !r.presence } : r) } : prev);
   const toggleScanConfig = () => setScanReview(prev => prev?.config ? { ...prev, config: { ...prev.config, apply: !prev.config.apply } } : prev);
+
+  // --- BERSIHKAN KPM GANDA ---
+  const handleFindDuplicates = () => {
+    const clusters = findDuplicateKpm(data);
+    if (clusters.length === 0) { showAlert("Tidak Ada Data Ganda", "Semua KPM sudah unik — tidak ditemukan data dobel."); return; }
+    setDedupReview({ clusters: clusters.map(c => ({ ...c, apply: true })) });
+  };
+  const toggleDedupCluster = (key) => setDedupReview(prev => prev ? { ...prev, clusters: prev.clusters.map(c => c.key === key ? { ...c, apply: !c.apply } : c) } : prev);
+
+  // Tombol "Bersihkan" di modal: baru di sinilah penghapusan terjadi (state + Firestore)
+  const applyDedup = async () => {
+    if (!dedupReview) return;
+    const toRemove = dedupReview.clusters.filter(c => c.apply).flatMap(c => c.remove);
+    if (toRemove.length === 0) { setDedupReview(null); return; }
+    const removeIds = new Set(toRemove.map(r => r.id));
+    setData(prev => prev.filter(item => !removeIds.has(item.id)));
+    setDedupReview(null);
+    try {
+      if (user && db) {
+        const ids = [...removeIds];
+        const chunkSize = 400;
+        for (let i = 0; i < ids.length; i += chunkSize) {
+          const batch = writeBatch(db);
+          ids.slice(i, i + chunkSize).forEach(id => batch.delete(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(id))));
+          await batch.commit();
+        }
+      }
+      showToast(`${toRemove.length} data ganda dihapus — tersisa ${data.length - toRemove.length} KPM`);
+    } catch (e) {
+      console.error("Hapus data ganda gagal", e);
+      showAlert("Error", "Sebagian penghapusan gagal tersimpan ke database. Periksa koneksi lalu jalankan Bersihkan Data Ganda sekali lagi.");
+    }
+  };
 
   // Tombol "Terapkan" di modal review: baru di sinilah data kehadiran ditulis (state + Firestore batch)
   const applyScanReview = async () => {
@@ -1100,6 +1134,7 @@ export default function App() {
               openNoteModal={openNoteModal} openEditModal={openEditModal} handleProposeGraduation={handleProposeGraduation}
               handleDeleteKPM={handleDeleteKPM} visibleCount={visibleCount} filteredData={filteredData} mobileLoadMoreRef={mobileLoadMoreRef}
               handleScanAbsen={handleScanAbsen} isScanningAbsen={isScanningAbsen} autoAssess={autoAssess} setAutoAssess={setAutoAssess}
+              handleFindDuplicates={handleFindDuplicates}
            />
         )}
 
@@ -1233,6 +1268,71 @@ export default function App() {
                   <div className="p-4 border-t border-gray-100 dark:border-gray-700 shrink-0 flex gap-3">
                       <button onClick={() => setScanReview(null)} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-[0.98] transition">Batal</button>
                       <button onClick={applyScanReview} className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 active:scale-[0.98] transition flex items-center justify-center gap-2"><CheckCheck size={18}/> Terapkan</button>
+                  </div>
+              </div>
+          </div>
+          );
+      })()}
+
+      {dedupReview && (() => {
+          const aktif = dedupReview.clusters.filter(c => c.apply);
+          const akanHapus = aktif.reduce((n, c) => n + c.remove.length, 0);
+          const perluCek = dedupReview.clusters.filter(c => c.needsCheck).length;
+          const sorted = [...dedupReview.clusters].sort((a, b) => (b.needsCheck ? 1 : 0) - (a.needsCheck ? 1 : 0));
+          return (
+          <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-200">
+              <div className="bg-white dark:bg-gray-800 w-full sm:max-w-lg h-[92vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-200">
+                  <div className="p-5 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+                      <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0"><CopyX size={22}/></div>
+                          <div className="flex-1 min-w-0">
+                              <h3 className="font-bold text-lg dark:text-white leading-tight">Bersihkan Data Ganda</h3>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{dedupReview.clusters.length} KPM punya salinan — periksa dulu sebelum dihapus</p>
+                          </div>
+                          <button onClick={() => setDedupReview(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition shrink-0"><X size={18} className="dark:text-gray-300"/></button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">{akanHapus} akan dihapus</span>
+                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">tersisa {data.length - akanHapus} KPM</span>
+                          {perluCek > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 flex items-center gap-1"><AlertTriangle size={12}/> {perluCek} perlu dicek</span>}
+                      </div>
+                      <button onClick={handleBackupData} className="w-full mt-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold text-[11px] hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition flex items-center justify-center gap-1.5">
+                          <Download size={14}/> Unduh Cadangan Dulu (disarankan)
+                      </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                      {sorted.map(c => (
+                          <div key={c.key} className={`p-3 rounded-xl border ${!c.apply ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 opacity-60' : c.needsCheck ? 'border-yellow-300 dark:border-yellow-800 bg-yellow-50/60 dark:bg-yellow-900/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800'}`}>
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className="min-w-0">
+                                      <p className="font-bold text-sm truncate text-gray-900 dark:text-white">{c.keep.name}</p>
+                                      <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{c.keep.group} · {c.remove.length + 1} kartu · cocok via {c.by === 'nik' ? 'NIK' : 'nama + kelompok'}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                      {c.needsCheck && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400" title="Tidak ada NIK — dicocokkan lewat nama, pastikan bukan dua orang berbeda">perlu cek</span>}
+                                      <label className="flex items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                                          <input type="checkbox" checked={c.apply} onChange={() => toggleDedupCluster(c.key)} className="accent-amber-600 w-3.5 h-3.5"/> bersihkan
+                                      </label>
+                                  </div>
+                              </div>
+                              <div className="space-y-1">
+                                  <div className="flex items-center gap-2 text-[10px] px-2 py-1.5 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
+                                      <Check size={12} className="text-green-600 dark:text-green-400 shrink-0"/>
+                                      <span className="text-green-800 dark:text-green-300 truncate">DISIMPAN: {c.keep.nik && c.keep.nik !== '-' ? `NIK ${c.keep.nik}` : 'tanpa NIK'} · {c.keep.address && c.keep.address !== '-' ? c.keep.address : 'tanpa alamat'} · {Object.keys(c.keep.components || {}).length} komponen</span>
+                                  </div>
+                                  {c.remove.map(r => (
+                                      <div key={r.id} className="flex items-center gap-2 text-[10px] px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900">
+                                          <X size={12} className="text-red-500 shrink-0"/>
+                                          <span className="text-red-700 dark:text-red-300 truncate">DIHAPUS: {r.nik && r.nik !== '-' ? `NIK ${r.nik}` : 'tanpa NIK'} · {r.address && r.address !== '-' ? r.address : 'tanpa alamat'} · {Object.keys(r.components || {}).length} komponen</span>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+                  <div className="p-4 border-t border-gray-100 dark:border-gray-700 shrink-0 flex gap-3">
+                      <button onClick={() => setDedupReview(null)} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-[0.98] transition">Batal</button>
+                      <button onClick={() => showConfirm("Hapus Data Ganda?", `${akanHapus} kartu akan dihapus permanen, menyisakan ${data.length - akanHapus} KPM. Pastikan Anda sudah mengunduh cadangan. Lanjutkan?`, applyDedup)} disabled={akanHapus === 0} className="flex-1 py-3 rounded-xl font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-lg shadow-amber-600/20 active:scale-[0.98] transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"><CopyX size={18}/> Bersihkan</button>
                   </div>
               </div>
           </div>
