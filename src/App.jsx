@@ -901,10 +901,55 @@ export default function App() {
   };
 
   const doGoogleLogin = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { showAlert("Login Gagal", e.message); } };
+
+  // Salin data sesi Tamu ke akun Google yang baru login. Digabung per-ID dokumen,
+  // jadi data yang sudah ada di akun Google tidak hilang.
+  const migrateGuestData = async (guestData, guestHistory, targetUid) => {
+    const chunkSize = 400;
+    for (let i = 0; i < guestData.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        guestData.slice(i, i + chunkSize).forEach(item => batch.set(doc(db, `artifacts/${appId}/users/${targetUid}/kpm_data`, String(item.id)), sanitizeForFirestore(item)));
+        await batch.commit();
+    }
+    for (let i = 0; i < guestHistory.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        guestHistory.slice(i, i + chunkSize).forEach(item => batch.set(doc(db, `artifacts/${appId}/users/${targetUid}/history`, String(item.id)), sanitizeForFirestore(item)));
+        await batch.commit();
+    }
+  };
+
+  const doGoogleLoginWithMigration = async (guestData, guestHistory) => {
+    let result;
+    try { result = await signInWithPopup(auth, new GoogleAuthProvider()); }
+    catch (e) { showAlert("Login Gagal", e.message); return; } // login batal: sesi Tamu & datanya tidak berubah
+    if (!db) return;
+    try {
+        showToast("Memindahkan data Tamu ke akun Google…");
+        await migrateGuestData(guestData, guestHistory, result.user.uid);
+        showToast(`${guestData.length} data KPM & ${guestHistory.length} riwayat berhasil dipindahkan`);
+    } catch (e) {
+        console.error("Migrasi data Tamu gagal", e);
+        // Jangan sampai ada data hilang: unduh cadangan darurat dari snapshot Tamu.
+        try {
+            const backup = { app: 'SIP-P2K2', version: 1, exportedAt: new Date().toISOString(), data: guestData, history: guestHistory, groupConfigs };
+            const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `Backup_Darurat_DataTamu_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+            showAlert("Migrasi Terputus", "Login berhasil, tapi pemindahan data Tamu terputus di tengah jalan. File cadangan darurat sudah diunduh otomatis — pulihkan lewat menu Tools > Restore Backup.");
+        } catch {
+            showAlert("Migrasi Terputus", "Login berhasil, tapi pemindahan data Tamu terputus. Jangan hapus data di perangkat ini, lalu coba ulangi dari menu Tools > Backup & Restore.");
+        }
+    }
+  };
+
   const handleLogin = async () => {
     if (!auth) { showAlert("Error", "Ganti API Key Firebase Anda terlebih dahulu di file config."); return; }
     if (user?.isAnonymous && (data.length > 0 || history.length > 0)) {
-        showConfirm("Login dengan Google?", `Ada ${data.length} data KPM dan ${history.length} riwayat di sesi Tamu ini. Data Tamu TIDAK otomatis pindah ke akun Google. Sebaiknya unduh Backup dulu (menu Tools > Backup Data), lalu pulihkan setelah login. Tetap lanjut login?`, doGoogleLogin, 'primary');
+        const guestData = [...data]; const guestHistory = [...history];
+        showConfirm("Pindahkan Data Tamu?", `Ada ${guestData.length} data KPM dan ${guestHistory.length} riwayat di sesi Tamu ini. Setelah login, semuanya akan otomatis dipindahkan ke akun Google Anda dan tersinkron antar perangkat. Lanjutkan?`, () => { closeModal(); doGoogleLoginWithMigration(guestData, guestHistory); }, 'primary');
         return;
     }
     doGoogleLogin();

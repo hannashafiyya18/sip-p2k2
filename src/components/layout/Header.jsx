@@ -1,8 +1,8 @@
 import React from 'react';
-import { 
-  FileText, Users, StickyNote, History, GraduationCap, 
-  Smartphone, Upload, Settings, Sun, Moon, Minimize, 
-  Download, Wrench, ChevronRight, LogOut 
+import {
+  FileText, Users, StickyNote, History, GraduationCap,
+  Smartphone, Upload, Settings, Sun, Moon, Minimize,
+  Download, Wrench, ChevronRight, LogOut, UserX
 } from 'lucide-react';
 
 export default function Header({
@@ -104,8 +104,12 @@ export default function Header({
                </>
            )}
 
-           {user ? (
-               <button onClick={handleLogout} aria-label="Keluar" className="p-2.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-90 transition"><LogOut size={18} /></button>
+           {user && !user.isAnonymous ? (
+               <button onClick={handleLogout} aria-label="Keluar" title={`Keluar dari ${user.email || 'akun Google'}`} className="p-2.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-90 transition"><LogOut size={18} /></button>
+           ) : user?.isAnonymous ? (
+              <button onClick={handleLogin} title="Data hanya tersimpan di perangkat ini dan TIDAK tersinkron antar perangkat. Klik untuk login Google." className="px-3 py-2 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-bold text-xs flex items-center gap-1.5 border border-amber-300/70 dark:border-amber-700/60 hover:bg-amber-200 dark:hover:bg-amber-900/50 active:scale-95 transition">
+                  <UserX size={14} /> Mode Tamu
+              </button>
            ) : (
               <button onClick={handleLogin} className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 active:scale-95 shadow-lg shadow-blue-600/25 transition">Login</button>
            )}
