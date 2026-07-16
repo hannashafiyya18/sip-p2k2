@@ -1,4 +1,5 @@
 import { callGemini } from './ai';
+import { PKH_MODULES } from '../utils/constants';
 
 /**
  * AI Agent Command Parser:
@@ -114,9 +115,12 @@ Hanya kembalikan JSON.`;
  * membaca 1 atau beberapa foto (multi-halaman) dan menentukan baris mana
  * yang kolom TTD-nya terisi tanda tangan. Nama di lembar TERCETAK urut dari
  * aplikasi, jadi AI hanya menilai ada/tidaknya tanda tangan per baris.
+ * Selain tabel TTD, kepala dokumen (Waktu, Kelompok, Modul/Sesi, Tempat) ikut
+ * dibaca untuk mengisi otomatis Konfigurasi Laporan — foto yang sama, tanpa
+ * permintaan AI tambahan.
  * @param {string[]} dataUrls hasil compressImage (data:image/jpeg;base64,...)
  * @param {string[]} kpmNames daftar nama KPM urut sesuai lembar absen
- * @returns {Promise<Array<{no: number|null, name: string, signed: boolean, confidence: 'high'|'low'}>>}
+ * @returns {Promise<{header: {tanggal: string|null, kelompok: string|null, materi: string|null, tempat: string|null}, rows: Array<{no: number|null, name: string, signed: boolean, confidence: 'high'|'low'}>}>}
  */
 export const extractAttendanceSheet = async (dataUrls, kpmNames) => {
   const images = (dataUrls || []).map(dataUrl => {
@@ -128,17 +132,26 @@ export const extractAttendanceSheet = async (dataUrls, kpmNames) => {
 
   const prompt = `Anda membaca foto lembar "DAFTAR HADIR" pertemuan kelompok PKH yang sudah ditandatangani peserta.
 Lembar berupa tabel: kolom nomor urut, kolom NAMA (tercetak), dan kolom paling kanan adalah TTD/TANDA TANGAN.
+Di BAGIAN ATAS lembar (sebelum tabel) biasanya ada kepala dokumen: Waktu/Tanggal, Kelompok, Modul/Sesi, dan Tempat Pertemuan.
 ${images.length > 1 ? `Ada ${images.length} foto — semuanya bagian dari SATU daftar yang sama (bersambung halaman berikutnya).` : ''}
 
 Daftar nama yang TERCETAK di lembar, urut dari atas (gunakan ini sebagai acuan, JANGAN menebak nama lain):
 ${(kpmNames || []).map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
-Tugas Anda HANYA menilai untuk SETIAP baris: apakah kolom TTD berisi coretan/tanda tangan (signed=true) atau kosong (signed=false).
+Tugas Anda:
+1. Baca kepala dokumen di bagian atas lembar.
+2. Nilai untuk SETIAP baris tabel: apakah kolom TTD berisi coretan/tanda tangan (signed=true) atau kosong (signed=false).
+
 Kembalikan JSON murni (tanpa markdown) dengan format:
-{ "rows": [ { "no": 1, "name": "NAMA PERSIS DARI DAFTAR", "signed": false, "confidence": "high" } ] }
+{
+  "header": { "tanggal": "YYYY-MM-DD atau null", "kelompok": "nama kelompok persis seperti tertulis atau null", "materi": "teks Modul/Sesi persis seperti tertulis atau null", "tempat": "tempat pertemuan persis seperti tertulis atau null" },
+  "rows": [ { "no": 1, "name": "NAMA PERSIS DARI DAFTAR", "signed": false, "confidence": "high" } ]
+}
 
 Aturan:
-- Sertakan SEMUA baris yang terlihat di foto, urut sesuai nomor.
+- "tanggal": apa pun format tanggal di lembar (2026-07-08, 08/07/2026, 8 Juli 2026), normalisasi ke YYYY-MM-DD. Jika tidak ada atau tidak terbaca, isi null.
+- Field kepala dokumen lain: salin persis seperti tertulis; null jika tidak ada. JANGAN mengarang.
+- Sertakan SEMUA baris tabel yang terlihat di foto, urut sesuai nomor.
 - "signed" = true jika ada coretan/paraf/tanda tangan apa pun di kolom TTD baris itu; false jika benar-benar kosong.
 - "confidence" = "low" jika tanda tangan sangat tipis, terpotong di tepi foto, menimpa baris lain, atau Anda ragu; selain itu "high".
 - Salin "name" persis dari daftar acuan di atas sesuai barisnya. Jangan mengarang baris yang tidak ada.
@@ -148,8 +161,20 @@ Hanya kembalikan JSON.`;
   try {
     const cleaned = (result || '').replace(/```json/gi, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(cleaned);
-    if (!parsed || !Array.isArray(parsed.rows)) throw new Error('bentuk tidak sesuai');
-    return parsed.rows
+    // Toleran terhadap dua bentuk: {header, rows} (baru) atau array rows saja
+    const rawRows = Array.isArray(parsed) ? parsed : parsed?.rows;
+    if (!Array.isArray(rawRows)) throw new Error('bentuk tidak sesuai');
+
+    const h = (!Array.isArray(parsed) && parsed.header && typeof parsed.header === 'object') ? parsed.header : {};
+    const asText = (v) => { const s = String(v ?? '').trim(); return s && s.toLowerCase() !== 'null' ? s : null; };
+    const header = {
+      tanggal: /^\d{4}-\d{2}-\d{2}$/.test(String(h.tanggal || '')) ? h.tanggal : null,
+      kelompok: asText(h.kelompok),
+      materi: asText(h.materi),
+      tempat: asText(h.tempat),
+    };
+
+    const rows = rawRows
       .filter(r => r && typeof r === 'object' && (r.name || r.no))
       .map(r => ({
         no: Number.isFinite(parseInt(r.no)) ? parseInt(r.no) : null,
@@ -157,10 +182,38 @@ Hanya kembalikan JSON.`;
         signed: r.signed === true,
         confidence: r.confidence === 'low' ? 'low' : 'high',
       }));
+    return { header, rows };
   } catch (error) {
     console.warn('Gagal parse hasil scan absen:', error, result);
     throw new Error('Hasil pembacaan foto tidak valid. Coba foto ulang dengan lebih terang, tegak, dan seluruh tabel terlihat.');
   }
+};
+
+/**
+ * Cocokkan teks Modul/Sesi hasil baca foto dengan daftar resmi PKH_MODULES.
+ * Materi di aplikasi bukan teks bebas (dropdown Modul -> Sesi), jadi hasil OCR
+ * harus dipetakan ke pilihan yang sah — atau null bila tidak meyakinkan.
+ * @returns {{module: string, session: string}|null}
+ */
+export const matchMateri = (raw) => {
+  const rawTokens = normalizeText(raw).split(' ').filter(Boolean);
+  if (rawTokens.length === 0) return null;
+  const sesiMatch = /sesi\s*(\d+)/i.exec(raw || '');
+  const sesiNum = sesiMatch ? parseInt(sesiMatch[1]) : null;
+
+  let best = null, bestScore = 0;
+  for (const [module, sessions] of Object.entries(PKH_MODULES)) {
+    const moduleScore = tokenScore(normalizeText(module).split(' ').filter(Boolean), rawTokens);
+    for (let i = 0; i < sessions.length; i++) {
+      const title = sessions[i].replace(/^sesi\s*\d+:\s*/i, '');
+      const titleScore = tokenScore(normalizeText(title).split(' ').filter(Boolean), rawTokens);
+      // Nomor sesi yang cocok adalah sinyal kuat: judul di lembar sering disingkat
+      const numBonus = sesiNum !== null && sesiNum === i + 1 ? 0.35 : 0;
+      const score = moduleScore * 0.45 + titleScore * 0.55 + numBonus;
+      if (score > bestScore) { bestScore = score; best = { module, session: sessions[i] }; }
+    }
+  }
+  return bestScore >= 0.75 ? best : null;
 };
 
 // --- FUZZY MATCHING (dijalankan lokal, tahan salah dengar dikte suara) ---

@@ -28,7 +28,7 @@ import ChatBot from './components/layout/ChatBot';
 
 // --- IMPORT AI SERVICES ---
 // import { generateJournalSummary, predictGraduation, parseAisearchQuery } from './services/ai';
-import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet } from './services/aiAgent';
+import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -332,8 +332,22 @@ export default function App() {
     try {
       const dataUrls = [];
       for (const f of files) dataUrls.push(await compressImage(f));
-      const rows = await extractAttendanceSheet(dataUrls, filteredData.map(k => k.name));
+      const { header, rows } = await extractAttendanceSheet(dataUrls, filteredData.map(k => k.name));
       if (rows.length === 0) { showAlert("Tidak Terbaca", "Tidak ada baris daftar hadir yang terbaca di foto. Coba foto ulang dengan lebih terang dan seluruh tabel terlihat."); return; }
+
+      // Kepala dokumen -> usulan isi Konfigurasi Laporan. Field yang tidak terbaca
+      // dibiarkan null (nilai konfigurasi lama dipertahankan, tidak dikosongkan).
+      const materiMatch = header.materi ? matchMateri(header.materi) : null;
+      const scanConfig = {
+        tanggal: header.tanggal,
+        tempat: header.tempat,
+        materi: materiMatch ? `Modul ${materiMatch.module} - ${materiMatch.session}` : null,
+        materiRaw: header.materi,
+        // Lembar milik kelompok lain? matchGroup null = nama di foto tidak mirip kelompok aktif
+        groupMismatch: (header.kelompok && selectedGroup !== 'Semua Kelompok' && !matchGroup(header.kelompok, [selectedGroup])) ? header.kelompok : null,
+        apply: true,
+      };
+      const adaUsulan = scanConfig.tanggal || scanConfig.tempat || scanConfig.materi || scanConfig.materiRaw || scanConfig.groupMismatch;
 
       // Petakan tiap baris hasil baca ke KPM kelompok aktif: fuzzy nama dulu, lalu nomor urut
       const rowByKpmId = new Map();
@@ -363,7 +377,7 @@ export default function App() {
           lansiaSingle: k.components?.lansia === 1,
         };
       });
-      setScanReview({ groupName: selectedGroup, rows: reviewRows, unmatchedNames });
+      setScanReview({ groupName: selectedGroup, rows: reviewRows, unmatchedNames, config: adaUsulan ? scanConfig : null });
     } catch (err) {
       showAlert("Scan Absen Gagal", err.message || "Gagal memproses foto lembar absen. Periksa koneksi internet Anda.");
     } finally {
@@ -372,6 +386,7 @@ export default function App() {
   };
 
   const toggleScanRow = (id) => setScanReview(prev => prev ? { ...prev, rows: prev.rows.map(r => r.id === id ? { ...r, presence: !r.presence } : r) } : prev);
+  const toggleScanConfig = () => setScanReview(prev => prev?.config ? { ...prev, config: { ...prev.config, apply: !prev.config.apply } } : prev);
 
   // Tombol "Terapkan" di modal review: baru di sinilah data kehadiran ditulis (state + Firestore batch)
   const applyScanReview = async () => {
@@ -388,6 +403,26 @@ export default function App() {
       return next;
     });
     setData(updatedData);
+
+    // Isi Konfigurasi Laporan dari kepala dokumen foto (bila sakelar "Isi otomatis" aktif).
+    // Hanya field yang terbaca yang ditimpa; sisanya mempertahankan nilai lama.
+    let configApplied = false;
+    const cfg = scanReview.config;
+    if (cfg?.apply) {
+      const patch = {};
+      if (cfg.tanggal) patch.tanggal = cfg.tanggal;
+      if (cfg.tempat) patch.tempat = cfg.tempat;
+      if (cfg.materi) patch.materi = cfg.materi;
+      if (Object.keys(patch).length > 0) {
+        const newConfig = { ...currentConfig, ...patch };
+        setCurrentConfig(newConfig);
+        const newConfigs = { ...groupConfigs, [scanReview.groupName]: newConfig };
+        setGroupConfigs(newConfigs);
+        safeSetItem(STORAGE_KEY_CONFIG, JSON.stringify(newConfigs));
+        configApplied = true;
+      }
+    }
+
     try {
       if (user && db && updates.length > 0) {
         const chunkSize = 400;
@@ -398,7 +433,7 @@ export default function App() {
         }
       }
       const hadir = scanReview.rows.filter(r => r.presence).length;
-      showToast(`Hasil scan diterapkan: ${hadir} hadir, ${scanReview.rows.length - hadir} tidak hadir`);
+      showToast(`Hasil scan diterapkan: ${hadir} hadir, ${scanReview.rows.length - hadir} tidak hadir${configApplied ? ' · konfigurasi terisi dari foto' : ''}`);
     } catch (e) {
       console.error("Apply scan review error", e);
       showAlert("Error", "Sebagian perubahan gagal tersimpan ke database. Periksa koneksi lalu coba lagi.");
@@ -1155,6 +1190,35 @@ export default function App() {
                       )}
                   </div>
                   <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                      {scanReview.config?.groupMismatch && (
+                          <div className="flex items-start gap-2.5 p-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+                              <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"/>
+                              <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">Lembar ini tampaknya milik kelompok <b>"{scanReview.config.groupMismatch}"</b>, sedangkan kelompok aktif adalah <b>"{scanReview.groupName}"</b>. Pastikan tidak salah lembar sebelum menerapkan.</p>
+                          </div>
+                      )}
+                      {scanReview.config && (
+                          <div className={`p-3 rounded-xl border transition ${scanReview.config.apply ? 'border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-900/10' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 opacity-60'}`}>
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                  <p className="text-xs font-bold text-gray-700 dark:text-gray-200 flex items-center gap-1.5"><FileText size={13} className="text-violet-500"/> Konfigurasi laporan dari foto</p>
+                                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-violet-600 dark:text-violet-400 cursor-pointer select-none">
+                                      <input type="checkbox" checked={scanReview.config.apply} onChange={toggleScanConfig} className="accent-violet-600 w-3.5 h-3.5"/> Isi otomatis
+                                  </label>
+                              </div>
+                              <div className="space-y-1 text-[11px]">
+                                  <p className="text-gray-600 dark:text-gray-300">Tanggal: {scanReview.config.tanggal
+                                      ? <b>{new Date(scanReview.config.tanggal + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</b>
+                                      : <span className="text-yellow-700 dark:text-yellow-400">tidak terbaca — nilai lama dipertahankan</span>}</p>
+                                  <p className="text-gray-600 dark:text-gray-300">Materi: {scanReview.config.materi
+                                      ? <b>{scanReview.config.materi}</b>
+                                      : scanReview.config.materiRaw
+                                      ? <span className="text-yellow-700 dark:text-yellow-400">terbaca "{scanReview.config.materiRaw}" tapi tidak cocok daftar modul — pilih manual di Konfigurasi</span>
+                                      : <span className="text-yellow-700 dark:text-yellow-400">tidak terbaca — nilai lama dipertahankan</span>}</p>
+                                  <p className="text-gray-600 dark:text-gray-300">Tempat: {scanReview.config.tempat
+                                      ? <b>{scanReview.config.tempat}</b>
+                                      : <span className="text-yellow-700 dark:text-yellow-400">tidak terbaca — nilai lama dipertahankan</span>}</p>
+                              </div>
+                          </div>
+                      )}
                       {sortedRows.map(r => (
                           <div key={r.id} className={`flex items-center gap-3 p-3 rounded-xl border ${r.needsCheck ? 'border-yellow-300 dark:border-yellow-800 bg-yellow-50/60 dark:bg-yellow-900/10' : r.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-700'}`}>
                               <button onClick={() => toggleScanRow(r.id)} className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${r.presence ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}>{r.presence ? <Check strokeWidth={3} size={20}/> : <X size={18}/>}</button>
