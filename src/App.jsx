@@ -955,6 +955,30 @@ export default function App() {
 
   const handleArchiveSession = async () => {
      if(filteredData.length===0) return;
+
+     const groupName = selectedGroup === 'Semua Kelompok' ? 'Semua Kelompok' : selectedGroup;
+     const currentMonth = currentConfig.tanggal ? currentConfig.tanggal.substring(0, 7) : "";
+     
+     const isDuplicate = history.some(h => {
+         const histMonth = h.date ? h.date.substring(0, 7) : "";
+         return h.groupName === groupName && 
+                h.materi === currentConfig.materi && 
+                histMonth === currentMonth;
+     });
+
+     if (isDuplicate) {
+         showConfirm(
+             "Potensi Data Ganda", 
+             `Sesi pertemuan untuk kelompok "${groupName}" dengan modul "${currentConfig.materi || 'Tanpa Modul'}" pada bulan ini sudah ada di Riwayat.\n\nSimpan lagi dan buat data ganda?`,
+             async () => {
+                 await performArchive(filteredData, selectedGroup, currentConfig);
+                 closeModal(); setActiveTab('history'); showToast("Sesi Disimpan & Data Direset");
+             },
+             'warning'
+         );
+         return;
+     }
+
      showConfirm("Selesai & Reset Sesi?", `Simpan ${filteredData.length} data ke Riwayat, lalu RESET ceklis kehadiran agar kosong untuk bulan depan?`,
          async () => {
              await performArchive(filteredData, selectedGroup, currentConfig);
