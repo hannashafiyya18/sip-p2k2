@@ -2,14 +2,15 @@ import React from 'react';
 import { 
   CheckCircle, XCircle, Wallet, Banknote, PieChart, Activity, Search,
   ChevronDown, Grid, Plus, CheckSquare, Archive, Trash2, Settings,
-  Camera, Upload, Loader2, Eye, Download, Check, StickyNote, Edit2,
-  CheckCheck, GraduationCap, Users, X,
+  Camera, Upload, Loader2, Eye, Download, X,
+  Users,
   Calendar, MapPin, BookOpen, User, Image as ImageIcon, ScanLine, Sparkles, CopyX
 } from 'lucide-react';
-import { PKH_MODULES, UNDERSTANDING_LEVELS } from '../../utils/constants';
-import { formatRupiah, calculateTotalAid } from '../../utils/helpers';
+import { PKH_MODULES } from '../../utils/constants';
+import { formatRupiah } from '../../utils/helpers';
 import EmptyState from '../ui/EmptyState';
 import CountUp from '../ui/CountUp';
+import KpmCard from '../ui/KpmCard';
 import { useReveal } from '../../hooks/useReveal';
 
 export default function InputTab({
@@ -53,12 +54,17 @@ export default function InputTab({
                   </div>
               </div>
               <div className="min-w-full md:min-w-[calc(33.33%-10px)] snap-center">
-                  <div className={`w-full h-32 p-5 rounded-2xl ${cardColor} shadow-sm relative overflow-hidden bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/10 dark:to-orange-900/10 border-yellow-100 dark:border-yellow-900/30 flex flex-col justify-center`}>
-                      <div className="absolute right-0 top-0 p-4 opacity-10 text-yellow-600 dark:text-yellow-500"><Wallet size={100} /></div>
+                  <div className={`w-full h-32 p-5 rounded-2xl relative overflow-hidden bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 dark:from-orange-600 dark:via-orange-700 dark:to-orange-800 shadow-lg shadow-orange-500/25 border border-orange-400/40 dark:border-orange-500/30 flex flex-col justify-center group`}>
+                      {/* Glow dekoratif di pojok */}
+                      <div className="absolute -right-10 -top-12 w-40 h-40 rounded-full bg-white/15 blur-2xl" aria-hidden="true" />
+                      {/* Kilau diagonal */}
+                      <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_35%,rgba(255,255,255,0.12)_50%,transparent_65%)]" aria-hidden="true" />
+                      {/* Watermark ikon */}
+                      <div className="absolute right-0 top-0 p-3 opacity-15 text-white transition-opacity group-hover:opacity-25"><Wallet size={90} /></div>
                       <div className="relative z-10">
-                          <p className="text-xs font-bold uppercase tracking-wider text-yellow-600 dark:text-yellow-500 flex items-center gap-2"><Banknote size={14}/> Total Estimasi Dana</p>
-                          <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1 tracking-tight tabular-nums"><CountUp value={stats.totalAid} format={formatRupiah} duration={0.9} /></h2>
-                          <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">*Estimasi untuk {stats.total} KPM{stats.total > 0 && <> &bull; rata-rata <span className="font-bold">{formatRupiah(Math.round(stats.totalAid / stats.total))}</span>/KPM</>}</p>
+                          <p className="text-xs font-bold uppercase tracking-wider text-white/90 flex items-center gap-2 drop-shadow-sm"><Banknote size={14}/> Total Estimasi Dana</p>
+                          <h2 className="text-3xl font-extrabold text-white mt-1 tracking-tight tabular-nums drop-shadow-sm"><CountUp value={stats.totalAid} format={formatRupiah} duration={0.9} /></h2>
+                          <p className="text-[10px] text-white/80 mt-1">*Estimasi untuk {stats.total} KPM{stats.total > 0 && <> &bull; rata-rata <span className="font-bold text-white">{formatRupiah(Math.round(stats.totalAid / stats.total))}</span>/KPM</>}</p>
                       </div>
                   </div>
               </div>
@@ -265,52 +271,27 @@ export default function InputTab({
       {/* LIST DATA KPM */}
       <div ref={listRef} className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {paginatedData.map(item => (
-             <div key={item.id} className={`group relative rounded-2xl ${cardPadding} transition-all duration-300 border hover:-translate-y-0.5 ${item.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30 hover:shadow-lg hover:shadow-green-500/10' : `${cardColor} hover:shadow-lg`}`}>
-                <div className={`flex items-start ${cardGap}`}>
-                   <button onClick={(e) => { e.stopPropagation(); handleStatusChange(item); }} className={`shrink-0 ${isCompact ? 'w-8 h-8 rounded-lg' : 'w-12 h-12 rounded-xl'} flex items-center justify-center transition-all duration-300 ${item.presence ? 'bg-green-500 text-white shadow-lg shadow-green-500/40 rotate-0' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-gray-200 rotate-0'}`}>
-                       {item.presence ? <Check strokeWidth={3} size={isCompact ? 16 : 20} /> : <span className={`${isCompact ? 'text-[10px]' : 'text-xs'} font-bold`}>{item.name.charAt(0)}</span>}
-                   </button>
-                   <div className="flex-1 min-w-0 pt-0.5 cursor-pointer" onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}>
-                       <div className="flex justify-between items-start">
-                          <h3 className={`font-bold ${textSizeBase} truncate ${textColor}`}>{item.name}</h3>
-                          <div className="flex items-center gap-2">
-
-                             {item.note && <StickyNote size={14} className="text-yellow-500 fill-yellow-500" />}
-                          </div>
-                       </div>
-                       <p className={`${textSizeSub} ${subText} flex items-center gap-1`}>{item.address} {item.bpnt && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded font-bold">BPNT</span>}</p>
-                       <div className="flex flex-wrap gap-1 mt-2">
-                           {renderComponentBadges(item.components, isCompact)}
-                           {calculateTotalAid(item.components) > 0 && <span className={`${isCompact ? 'text-[9px] px-1.5' : 'text-[10px] px-2 py-0.5'} rounded-full bg-gray-100 dark:bg-gray-700 font-bold dark:text-gray-300`}>{formatRupiah(calculateTotalAid(item.components))}</span>}
-                       </div>
-                   </div>
-                   <button onClick={(e) => { e.stopPropagation(); setExpandedId(expandedId === item.id ? null : item.id); }} className="p-2 text-gray-300 hover:text-gray-500 transition">
-                       <ChevronDown size={20} className={`transition-transform duration-300 ${expandedId === item.id ? 'rotate-180' : ''}`} />
-                   </button>
-                </div>
-
-                {expandedId === item.id && (
-                    <div className="mt-4 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700 animate-in slide-in-from-top-2" onClick={(e) => e.stopPropagation()}>
-
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                            <div className="space-y-1">
-                                 <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Pemahaman</label>
-                                 <select disabled={!item.presence} value={item.understanding} onChange={e=>handleUnderstandingChange(item, e.target.value)} className="w-full text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-blue-500 dark:text-white">
-                                        {UNDERSTANDING_LEVELS.map(l=><option key={l} value={l}>{l}</option>)}
-                                 </select>
-                            </div>
-                            <div className="flex items-end gap-2">
-                                 <button onClick={() => openNoteModal(item.id, item.name, item.note)} className="flex-1 py-2 bg-yellow-50 text-yellow-600 rounded-lg text-xs font-bold border border-yellow-200 hover:bg-yellow-100 flex items-center justify-center gap-1 dark:bg-yellow-900/20 dark:border-yellow-900 dark:text-yellow-500"><StickyNote size={14}/> Catatan</button>
-                                 <button onClick={() => openEditModal(item)} className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold border border-blue-200 hover:bg-blue-100 flex items-center justify-center gap-1 dark:bg-blue-900/20 dark:border-blue-900 dark:text-blue-500"><Edit2 size={14}/> Edit</button>
-                            </div>
-                            <button onClick={() => handleProposeGraduation(item)} className={`col-span-2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border transition ${item.graduationStatus ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400'}`} disabled={!!item.graduationStatus}>
-                               {item.graduationStatus ? <><CheckCheck size={14}/> Sudah Diusulkan</> : <><GraduationCap size={14}/> Usulkan Graduasi</>}
-                            </button>
-                        </div>
-                        <button onClick={()=>handleDeleteKPM(item.id)} className="w-full py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition flex items-center justify-center gap-2 mt-2"><Trash2 size={14}/> Hapus Data KPM</button>
-                    </div>
-                )}
-             </div>
+             <KpmCard
+                key={item.id}
+                item={item}
+                isExpanded={expandedId === item.id}
+                onTogglePresence={() => handleStatusChange(item)}
+                onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                onOpenNote={() => openNoteModal(item.id, item.name, item.note)}
+                onEdit={() => openEditModal(item)}
+                onProposeGraduation={() => handleProposeGraduation(item)}
+                onDelete={() => handleDeleteKPM(item.id)}
+                onUnderstandingChange={(v) => handleUnderstandingChange(item, v)}
+                renderBadges={renderComponentBadges}
+                cardColor={cardColor}
+                textColor={textColor}
+                subText={subText}
+                cardPadding={cardPadding}
+                cardGap={cardGap}
+                isCompact={isCompact}
+                textSizeBase={textSizeBase}
+                textSizeSub={textSizeSub}
+             />
           ))}
           
           {visibleCount < filteredData.length && <div ref={mobileLoadMoreRef} className="py-6 flex justify-center col-span-full"><Loader2 className="animate-spin text-gray-400"/></div>}

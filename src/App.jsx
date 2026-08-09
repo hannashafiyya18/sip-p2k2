@@ -287,8 +287,8 @@ export default function App() {
   const handleUnderstandingChange = (item, newVal) => updateKpmItem({ ...item, understanding: newVal, understandingManual: true });
   // Nilai pemahaman saat kehadiran di-set massal: hormati koreksi manual, lalu aturan otomatis (jika aktif), lalu default lama
   const massUnderstanding = (item, presence) => item.understandingManual === true ? item.understanding : (autoAssess ? deriveUnderstanding(item, presence) : (presence ? "Baik" : "-"));
-  const saveNote = () => { const item = data.find(i => i.id === noteModal.kpmId); if (item) { updateKpmItem({ ...item, note: noteModal.text }); showToast("Catatan disimpan"); } closeNoteModal(); };
-  const deleteNote = (item) => updateKpmItem({ ...item, note: "" });
+  const saveNote = () => { const item = data.find(i => i.id === noteModal.kpmId); if (item) { updateKpmItem({ ...item, note: noteModal.text, noteUpdatedAt: Date.now() }); showToast("Catatan disimpan"); } closeNoteModal(); };
+  const deleteNote = (item) => updateKpmItem({ ...item, note: "", noteUpdatedAt: null });
   const saveEditedKPM = () => {
     if (!editModal.data.name || !editModal.data.name.trim()) { showAlert("Nama Kosong", "Nama lengkap KPM wajib diisi."); return; }
     updateKpmItem({ ...editModal.data, name: editModal.data.name.trim(), group: (editModal.data.group || "").trim() || "Umum" });

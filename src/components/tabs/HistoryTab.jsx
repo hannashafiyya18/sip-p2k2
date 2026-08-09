@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import { useReveal } from '../../hooks/useReveal';
+import { avatarColorFor } from '../../utils/avatar';
 
 export default function HistoryTab({
   isLaporanBulananOpen, setIsLaporanBulananOpen, setShowBulananMonthModal,
@@ -153,10 +154,16 @@ export default function HistoryTab({
                 const hasFoto = !!h.fotoKegiatan;
                 return (
                 <div key={h.id} role="button" tabIndex={0} onClick={() => handleEditHistory(h)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditHistory(h); } }} className={`group p-5 rounded-2xl ${cardColor} shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-900 flex flex-col gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}>
-                    <div className="flex justify-between items-start gap-2">
-                        <div className="min-w-0">
+                    {/* Header: avatar kelompok + nama + tanggal chip */}
+                    <div className="flex items-start gap-3">
+                        <div className={`w-11 h-11 rounded-xl ${avatarColorFor(h.groupName)} flex items-center justify-center shrink-0 shadow-sm`}>
+                            <span className="text-sm font-extrabold tracking-tight">{h.groupName.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
                             <h3 className={`font-bold text-base leading-tight truncate ${textColor}`}>{h.groupName}</h3>
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 flex items-center gap-1.5"><CalendarDays size={12} className="shrink-0"/> {formatTanggal(h.date)}</p>
+                            <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                <CalendarDays size={11} className="shrink-0"/> {formatTanggal(h.date)}
+                            </span>
                         </div>
                         <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(h.id); }} className="shrink-0 p-2 -mt-1 -mr-1 rounded-lg text-gray-300 dark:text-gray-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Hapus Riwayat" aria-label="Hapus Riwayat"><Trash2 size={15} /></button>
                     </div>
@@ -166,7 +173,9 @@ export default function HistoryTab({
                     <div>
                         <div className="flex items-baseline justify-between mb-1.5">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Kehadiran</span>
-                            <span className={`text-sm font-bold tabular-nums ${textColor}`}>{h.stats.present}<span className="text-gray-400 font-medium text-xs">/{h.stats.total}</span></span>
+                            <span className={`text-sm font-bold tabular-nums ${textColor}`}>{h.stats.present}<span className="text-gray-400 font-medium text-xs">/{h.stats.total}</span>
+                                <span className="ml-1.5 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">{pct}%</span>
+                            </span>
                         </div>
                         <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
                             <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
@@ -175,7 +184,10 @@ export default function HistoryTab({
 
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
                         {hasFoto ? (
-                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><Camera size={11}/> Foto ada</span>
+                            <span className="inline-flex items-center gap-2">
+                                <img src={h.fotoKegiatan} alt="Foto kegiatan" loading="lazy" className="w-9 h-9 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-700 shrink-0" />
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><Camera size={11}/> Foto</span>
+                            </span>
                         ) : (
                             <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"><ImageOff size={11}/> Belum ada foto</span>
                         )}
