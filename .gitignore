@@ -34,3 +34,10 @@ dist-ssr
 
 # Repomix dump bisa berisi seluruh isi source (rawan bocor secret)
 repomix-output.xml
+
+# Hasil build yang tercecer di root (bukan source)
+now.css
+prod_index.html
+
+# Laporan berisi data KPM — jangan pernah diunggah
+Laporan_*.pdf
