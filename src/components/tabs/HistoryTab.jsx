@@ -1,5 +1,5 @@
-import React from 'react';
-import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff } from 'lucide-react';
+import React, { useState } from 'react';
+import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff, ClipboardList, CheckCircle, AlertTriangle, Plus } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import { useReveal } from '../../hooks/useReveal';
 import { avatarColorFor } from '../../utils/avatar';
@@ -14,9 +14,13 @@ export default function HistoryTab({
   historyFilterGroup, historyFilterYear, setHistoryFilterYear,
   historyFilterMonth, setHistoryFilterMonth, textColor, cardColor,
   handleEditHistory, handleDeleteHistory,
-  isRekapOpen, setIsRekapOpen, rekapMonth, rekapYear, setRekapYear, setShowRekapMonthModal, handleBuildRekap
+  isRekapOpen, setIsRekapOpen, rekapMonth, rekapYear, setRekapYear, setShowRekapMonthModal, handleBuildRekap,
+  historyCoverage, handleInputKelompok
 }) {
   const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
+  const [showSudah, setShowSudah] = useState(false);
+  const NAMA_BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const tanggalPendek = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }); };
   // "2026-06-11" -> "11 Jun 2026" (lebih mudah dipindai daripada format ISO)
   const formatTanggal = (iso) => {
     const d = new Date(iso);
@@ -140,6 +144,99 @@ export default function HistoryTab({
                 ))}
             </div>
         </div>
+
+        {/* --- CAPAIAN INPUT: kelompok mana yang sudah & belum diinput --- */}
+        {historyCoverage && historyCoverage.mode === 'bulan' && (() => {
+            const { sudah, belum, total, bulan, year, belumWaktunya } = historyCoverage;
+            const pct = total ? Math.round((sudah.length / total) * 100) : 0;
+            const tuntas = belum.length === 0;
+            return (
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 mb-4">
+                <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"><ClipboardList size={16}/></span>
+                    <div className="flex-1 min-w-0 leading-tight">
+                        <p className="text-sm font-bold text-gray-800 dark:text-white">Capaian Input P2K2</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">{NAMA_BULAN[bulan]} {year} · seluruh kelompok</p>
+                    </div>
+                    <span className={`text-sm font-extrabold shrink-0 ${tuntas ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>{pct}%</span>
+                </div>
+
+                <div className="flex items-baseline gap-1.5 mt-3">
+                    <b className="text-3xl font-extrabold text-gray-800 dark:text-white tracking-tight tabular-nums">{sudah.length}</b>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">dari {total} kelompok sudah diinput</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-2 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-500 ${tuntas ? 'bg-green-500' : 'bg-amber-500'}`} style={{ width: `${pct}%` }} />
+                </div>
+
+                {tuntas ? (
+                    <p className="mt-3 text-[11px] font-bold text-green-700 dark:text-green-400 flex items-center gap-1.5"><CheckCircle size={13}/> Semua kelompok sudah diinput bulan ini.</p>
+                ) : (
+                    <div className="mt-3 pt-3 border-t border-dashed border-gray-200 dark:border-gray-700">
+                        <p className="text-[11px] font-extrabold text-amber-700 dark:text-amber-400 flex items-center gap-1.5 mb-2">
+                            <AlertTriangle size={12}/> Belum diinput ({belum.length})
+                            {belumWaktunya && <span className="font-medium text-gray-400 dark:text-gray-500">· bulan ini belum berjalan</span>}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {belum.map(g => (
+                                <button key={g} onClick={() => handleInputKelompok(g)} title={`Buka tab Input untuk ${g}`} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 active:scale-[0.97] transition dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900 dark:hover:bg-amber-900/40">
+                                    <span className="truncate max-w-[190px]">{g}</span><Plus size={12} className="opacity-60 shrink-0"/>
+                                </button>
+                            ))}
+                        </div>
+                        <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">Ketuk kelompok untuk langsung membukanya di tab Input.</p>
+                    </div>
+                )}
+
+                {sudah.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-dashed border-gray-200 dark:border-gray-700">
+                        <button onClick={() => setShowSudah(!showSudah)} className="w-full flex items-center gap-1.5 text-[11px] font-extrabold text-green-700 dark:text-green-400">
+                            <CheckCircle size={12}/> Sudah diinput ({sudah.length})
+                            <ChevronDown size={13} className={`ml-auto text-gray-400 transition-transform ${showSudah ? 'rotate-180' : ''}`}/>
+                        </button>
+                        {showSudah && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                                {sudah.map(s => (
+                                    <span key={s.group} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900">
+                                        <span className="truncate max-w-[190px]">{s.group}</span>
+                                        <i className="not-italic font-semibold opacity-60">{tanggalPendek(s.date)}</i>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+            );
+        })()}
+
+        {historyCoverage && historyCoverage.mode === 'tahun' && (
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 mb-4">
+                <div className="flex items-center gap-2.5 mb-3">
+                    <span className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"><ClipboardList size={16}/></span>
+                    <div className="flex-1 min-w-0 leading-tight">
+                        <p className="text-sm font-bold text-gray-800 dark:text-white">Capaian Input P2K2</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">Ringkasan {historyCoverage.year} · ketuk bulan untuk merinci</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {historyCoverage.perBulan.map(b => {
+                        const lengkap = b.jumlah >= historyCoverage.total;
+                        const gaya = b.belumWaktunya
+                            ? 'bg-gray-50 text-gray-300 border-gray-100 dark:bg-gray-800/40 dark:text-gray-600 dark:border-gray-800'
+                            : lengkap ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900'
+                            : b.jumlah === 0 ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900';
+                        return (
+                            <button key={b.bulan} onClick={() => setHistoryFilterMonth(b.bulan)} className={`p-2 rounded-xl border text-center transition active:scale-[0.97] ${gaya}`}>
+                                <p className="text-[9.5px] font-bold uppercase tracking-wide opacity-70">{NAMA_BULAN[b.bulan].slice(0, 3)}</p>
+                                <p className="text-[11px] font-extrabold tabular-nums">{b.belumWaktunya ? '–' : `${b.jumlah}/${historyCoverage.total}`}</p>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
 
         {filteredHistory.length === 0 ? (
             <EmptyState

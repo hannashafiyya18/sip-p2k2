@@ -153,7 +153,7 @@ export default function App() {
         try {
             const savedData = localStorage.getItem(STORAGE_KEY_DATA);
             setData(savedData ? (Array.isArray(JSON.parse(savedData)) ? JSON.parse(savedData) : []) : []);
-            const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY); 
+            const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
             setHistory(savedHistory ? (Array.isArray(JSON.parse(savedHistory)) ? JSON.parse(savedHistory) : []) : []);
             const savedConfig = localStorage.getItem(STORAGE_KEY_CONFIG); 
             setGroupConfigs(savedConfig ? JSON.parse(savedConfig) : {});
@@ -235,6 +235,60 @@ export default function App() {
           return matchYear && matchMonth && matchGroup;
       });
   }, [history, historyFilterYear, historyFilterMonth, historyFilterGroup]);
+
+  // Capaian input P2K2: silangkan daftar kelompok (dari data KPM) dengan riwayat sesi,
+  // untuk memetakan kelompok mana yang sudah/belum diinput pada periode terpilih.
+  // Sengaja mengabaikan historyFilterGroup: panel ini soal cakupan SELURUH kelompok.
+  const historyCoverage = useMemo(() => {
+    const allGroups = dynamicGroups.filter(g => g !== "Semua Kelompok");
+    const year = parseInt(historyFilterYear);
+    if (allGroups.length === 0 || !Number.isFinite(year)) return null;
+
+    const sesiTahunIni = (Array.isArray(history) ? history : []).filter(h => {
+      if (!h?.date) return false;
+      const d = new Date(h.date);
+      return !isNaN(d) && d.getFullYear() === year;
+    });
+
+    const now = new Date();
+    const belumWaktunya = (m) => year > now.getFullYear() || (year === now.getFullYear() && m > now.getMonth());
+
+    if (historyFilterMonth === 'all') {
+      // "Semua Bulan": istilah "belum" jadi rancu, jadi tampilkan ringkasan per bulan.
+      const perBulan = Array.from({ length: 12 }, (_, m) => ({
+        bulan: m,
+        jumlah: new Set(sesiTahunIni.filter(h => new Date(h.date).getMonth() === m).map(h => h.groupName)).size,
+        belumWaktunya: belumWaktunya(m),
+      }));
+      return { mode: 'tahun', total: allGroups.length, perBulan, year };
+    }
+
+    const bulan = parseInt(historyFilterMonth);
+    // Satu kelompok bisa punya >1 sesi sebulan; ambil tanggal terakhirnya saja.
+    const tanggalPerKelompok = new Map();
+    for (const h of sesiTahunIni) {
+      if (new Date(h.date).getMonth() !== bulan) continue;
+      const prev = tanggalPerKelompok.get(h.groupName);
+      if (!prev || new Date(h.date) > new Date(prev)) tanggalPerKelompok.set(h.groupName, h.date);
+    }
+    return {
+      mode: 'bulan',
+      bulan,
+      year,
+      total: allGroups.length,
+      belumWaktunya: belumWaktunya(bulan),
+      sudah: allGroups.filter(g => tanggalPerKelompok.has(g)).map(g => ({ group: g, date: tanggalPerKelompok.get(g) })),
+      belum: allGroups.filter(g => !tanggalPerKelompok.has(g)),
+    };
+  }, [dynamicGroups, history, historyFilterYear, historyFilterMonth]);
+
+  // Dari chip "belum diinput" -> langsung ke tab Input dengan kelompok itu terpilih.
+  const handleInputKelompok = (group) => {
+    setSelectedGroup(group);
+    setActiveTab('input');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast(`Kelompok ${group} dipilih — siap diinput`);
+  };
 
   const filteredData = useMemo(() => { return data.filter(item => { const matchesGroup = selectedGroup === "Semua Kelompok" || item.group === selectedGroup; const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || (item.nik && item.nik.includes(searchTerm)); return matchesGroup && matchesSearch; }); }, [data, selectedGroup, searchTerm]);
   const filteredJurnalData = useMemo(() => { return data.filter(i => { const hasNote = i.note && i.note.trim() !== ""; const matchesGroup = selectedGroupJurnal === "Semua Kelompok" || i.group === selectedGroupJurnal; return hasNote && matchesGroup; }); }, [data, selectedGroupJurnal]);
@@ -1221,6 +1275,7 @@ export default function App() {
               handleEditHistory={handleEditHistory} handleDeleteHistory={handleDeleteHistory}
               isRekapOpen={isRekapOpen} setIsRekapOpen={setIsRekapOpen} rekapMonth={rekapMonth} rekapYear={rekapYear}
               setRekapYear={setRekapYear} setShowRekapMonthModal={setShowRekapMonthModal} handleBuildRekap={handleBuildRekap}
+              historyCoverage={historyCoverage} handleInputKelompok={handleInputKelompok}
             />
         )}
       </main>
