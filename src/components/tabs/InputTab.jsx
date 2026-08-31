@@ -22,7 +22,7 @@ export default function InputTab({
   setIsConfigOpen, currentConfig, handleConfigChange, handlePendampingChange, selectedModule,
   setSelectedModule, isCompressing, handlePhotoUpload, handleLogoKiriUpload,
   handleLogoKananUpload, generateAbsensiPDF, isGeneratingPDF, paginatedData,
-  cardPadding, isCompact, cardGap, handleStatusChange, expandedId, setExpandedId,
+  cardPadding, isCompact, cardGap, handleAttendanceChange, expandedId, setExpandedId,
   textSizeBase, textSizeSub, renderComponentBadges, handleUnderstandingChange,
   openNoteModal, openEditModal, handleProposeGraduation, handleDeleteKPM,
   visibleCount, filteredData, mobileLoadMoreRef,
@@ -268,6 +268,35 @@ export default function InputTab({
           </div>
       )}
 
+      {/* BILAH ENTRI ABSENSI — cacah tri-state + titik awal "hadir semua".
+          "Belum ditandai" sengaja ditampilkan menonjol: itu satu-satunya angka yang
+          memberi tahu ada KPM terlewat sebelum sesi diarsipkan. */}
+      {stats.total > 0 && (
+        <div className={`sticky top-[130px] z-20 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-800 ${cardColor}`}>
+            <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <p className={`text-[10px] font-bold uppercase tracking-wider ${subText}`}>Absensi {selectedGroup === 'Semua Kelompok' ? '· semua kelompok' : `· ${selectedGroup}`}</p>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900 tabular-nums">{stats.attendance.hadir} Hadir</span>
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900 tabular-nums">{stats.attendance.sakit} Sakit</span>
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900 tabular-nums">{stats.attendance.alfa} Alfa</span>
+                        {stats.attendance.belum > 0 ? (
+                            <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 tabular-nums">{stats.attendance.belum} belum ditandai</span>
+                        ) : (
+                            <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900 inline-flex items-center gap-1"><CheckCircle size={11}/> Lengkap</span>
+                        )}
+                    </div>
+                </div>
+                <button
+                    onClick={handleMarkAllPresent}
+                    title="Tandai semua KPM di daftar ini Hadir, lalu ubah yang sakit/alfa"
+                    className="shrink-0 px-3 py-2.5 rounded-xl text-xs font-bold text-white bg-green-600 hover:bg-green-700 active:scale-95 shadow-lg shadow-green-600/25 transition flex items-center gap-1.5">
+                    <CheckSquare size={15}/> <span>Hadir semua</span>
+                </button>
+            </div>
+        </div>
+      )}
+
       {/* LIST DATA KPM */}
       <div ref={listRef} className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {paginatedData.map(item => (
@@ -275,7 +304,7 @@ export default function InputTab({
                 key={item.id}
                 item={item}
                 isExpanded={expandedId === item.id}
-                onTogglePresence={() => handleStatusChange(item)}
+                onAttendanceChange={(s) => handleAttendanceChange(item, s)}
                 onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
                 onOpenNote={() => openNoteModal(item.id, item.name, item.note)}
                 onEdit={() => openEditModal(item)}

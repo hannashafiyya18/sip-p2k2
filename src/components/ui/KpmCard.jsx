@@ -1,48 +1,72 @@
 import React from 'react';
 import {
   Check, ChevronDown, StickyNote, Edit2, GraduationCap, Trash2,
-  CheckCheck, MapPin, Wallet
+  CheckCheck, MapPin, Wallet, Thermometer, X as XIcon
 } from 'lucide-react';
-import { UNDERSTANDING_LEVELS } from '../../utils/constants';
-import { formatRupiah, calculateTotalAid } from '../../utils/helpers';
+import { UNDERSTANDING_LEVELS, ATTENDANCE_STATUSES, ATTENDANCE_LABELS, ATTENDANCE_SHORT } from '../../utils/constants';
+import { formatRupiah, calculateTotalAid, workingStatus } from '../../utils/helpers';
 import { avatarColorFor } from '../../utils/avatar';
+
+// Gaya per status kehadiran. Dipakai bersama oleh cincin avatar, bingkai kartu,
+// dan segmen H/S/A supaya satu status selalu terbaca dengan warna yang sama.
+const STATUS_STYLE = {
+  HADIR: {
+    icon: Check,
+    ring: 'ring-2 ring-green-500/60',
+    card: 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30 hover:shadow-lg hover:shadow-green-500/10',
+    active: 'bg-green-600 text-white border-green-600 shadow-sm shadow-green-600/30',
+    idle: 'text-green-700 border-green-200 hover:bg-green-50 dark:text-green-400 dark:border-green-900 dark:hover:bg-green-900/20',
+  },
+  SAKIT: {
+    icon: Thermometer,
+    ring: 'ring-2 ring-amber-500/60',
+    card: 'bg-white dark:bg-gray-800 border-amber-200 dark:border-amber-900 ring-1 ring-amber-100 dark:ring-amber-900/30 hover:shadow-lg hover:shadow-amber-500/10',
+    active: 'bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/30',
+    idle: 'text-amber-700 border-amber-200 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-900 dark:hover:bg-amber-900/20',
+  },
+  ALFA: {
+    icon: XIcon,
+    ring: 'ring-2 ring-red-500/60',
+    card: 'bg-white dark:bg-gray-800 border-red-200 dark:border-red-900 ring-1 ring-red-100 dark:ring-red-900/30 hover:shadow-lg hover:shadow-red-500/10',
+    active: 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-500/30',
+    idle: 'text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-900/20',
+  },
+};
 
 // Kartu KPM — adaptasi pola "user list card" (21st.dev) ke design language app:
 // rounded-2xl, aksen oranye/biru, dark mode, dan mode compact dari pengaturan.
-// Semua interaksi dipertahankan: toggle hadir, expand detail, catatan, edit,
-// usulan graduasi, hapus, dan penilaian pemahaman.
+// Semua interaksi dipertahankan: expand detail, catatan, edit, usulan graduasi,
+// hapus, dan penilaian pemahaman. Toggle hadir/absen lama diganti segmen H/S/A.
 export default function KpmCard({
-  item, isExpanded, onTogglePresence, onToggleExpand, onOpenNote, onEdit,
+  item, isExpanded, onAttendanceChange, onToggleExpand, onOpenNote, onEdit,
   onProposeGraduation, onDelete, onUnderstandingChange, renderBadges,
   cardColor, textColor, subText, cardPadding, cardGap, isCompact, textSizeBase, textSizeSub,
 }) {
   const totalAid = calculateTotalAid(item.components);
-  const btnSize = isCompact ? 'w-9 h-9 rounded-xl' : 'w-12 h-12 rounded-2xl';
+  const status = workingStatus(item);
+  const style = status ? STATUS_STYLE[status] : null;
+  const StatusIcon = style?.icon;
+  const avatarSize = isCompact ? 'w-9 h-9 rounded-xl' : 'w-12 h-12 rounded-2xl';
 
   return (
     <div
       className={`group relative rounded-2xl ${cardPadding} transition-all duration-300 border hover:-translate-y-0.5 ${
-        item.presence
-          ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900 ring-1 ring-green-100 dark:ring-green-900/30 hover:shadow-lg hover:shadow-green-500/10'
-          : `${cardColor} border-gray-100 dark:border-gray-800 hover:shadow-lg hover:shadow-gray-500/5 hover:border-gray-200 dark:hover:border-gray-700`
+        style ? style.card : `${cardColor} border-gray-100 dark:border-gray-800 hover:shadow-lg hover:shadow-gray-500/5 hover:border-gray-200 dark:hover:border-gray-700`
       }`}
     >
       <div className={`flex items-start ${cardGap}`}>
-        {/* Tombol kehadiran: gradient hijau saat hadir, avatar inisial saat absen */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onTogglePresence(); }}
-          aria-label={item.presence ? `Tandai ${item.name} absen` : `Tandai ${item.name} hadir`}
-          title={item.presence ? 'Klik untuk absen' : 'Klik untuk hadir'}
-          className={`shrink-0 ${btnSize} flex items-center justify-center transition-all duration-300 active:scale-90 ${
-            item.presence
-              ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/40 ring-2 ring-green-500/20'
-              : `${avatarColorFor(item.name)} hover:scale-105 shadow-sm`
-          }`}
+        {/* Avatar inisial + cincin warna status (identitas, bukan tombol) */}
+        <div
+          className={`shrink-0 ${avatarSize} flex items-center justify-center relative ${avatarColorFor(item.name)} ${style ? style.ring : ''} shadow-sm`}
+          aria-hidden="true"
         >
-          {item.presence
-            ? <Check strokeWidth={3} size={isCompact ? 16 : 22} />
-            : <span className={`${isCompact ? 'text-sm' : 'text-lg'} font-extrabold tracking-tight`}>{item.name.charAt(0).toUpperCase()}</span>}
-        </button>
+          <span className={`${isCompact ? 'text-sm' : 'text-lg'} font-extrabold tracking-tight`}>{item.name.charAt(0).toUpperCase()}</span>
+          {StatusIcon && (
+            <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-gray-800 ${style.active}`}>
+              <StatusIcon strokeWidth={3} size={11} />
+            </span>
+          )}
+        </div>
 
         {/* Info KPM */}
         <div className="flex-1 min-w-0 pt-1 cursor-pointer" onClick={onToggleExpand}>
@@ -79,6 +103,31 @@ export default function KpmCard({
         >
           <ChevronDown size={20} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
         </button>
+      </div>
+
+      {/* Segmen status kehadiran: tiga sasaran ketuk terpisah, lebar sepertiga kartu.
+          Sengaja BUKAN pola "ketuk untuk siklus" — mengoreksi salah tekan di HP harus
+          cukup satu ketukan, bukan memutar penuh H -> S -> A. */}
+      <div className={`grid grid-cols-3 gap-1.5 ${isCompact ? 'mt-2' : 'mt-3'}`} role="group" aria-label={`Status kehadiran ${item.name}`}>
+        {ATTENDANCE_STATUSES.map((s) => {
+          const st = STATUS_STYLE[s];
+          const isActive = status === s;
+          const Icon = st.icon;
+          return (
+            <button
+              key={s}
+              onClick={(e) => { e.stopPropagation(); onAttendanceChange(s); }}
+              aria-pressed={isActive}
+              title={isActive ? `Ketuk lagi untuk batalkan ${ATTENDANCE_LABELS[s]}` : `Tandai ${ATTENDANCE_LABELS[s]}`}
+              className={`${isCompact ? 'py-1.5 text-[11px]' : 'py-2.5 text-xs'} rounded-xl font-bold border transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                isActive ? st.active : `bg-transparent ${st.idle}`
+              }`}
+            >
+              <Icon strokeWidth={3} size={isCompact ? 12 : 14} className="shrink-0" />
+              <span>{isCompact ? ATTENDANCE_SHORT[s] : ATTENDANCE_LABELS[s]}</span>
+            </button>
+          );
+        })}
       </div>
 
       {isExpanded && (

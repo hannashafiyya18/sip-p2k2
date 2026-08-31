@@ -21,3 +21,16 @@ export const STORAGE_KEY_VIEW_SETTINGS = 'pkh_app_view_settings_v3';
 export const STORAGE_KEY_AUTO_ASSESS = 'pkh_app_auto_assess_v1';
 export const STORAGE_KEY_LOGO_KIRI = 'pkh_app_logo_kiri_global';
 export const STORAGE_KEY_LOGO_KANAN = 'pkh_app_logo_kanan_global';
+
+// --- STATUS KEHADIRAN P2K2 (tri-state) ---
+// Ditambahkan untuk entri absensi per KPM per kegiatan.
+// PENTING: `presence` (boolean) TETAP satu-satunya sumber data untuk semua cetakan PDF.
+// Aturannya presence === (status === 'HADIR'). SAKIT dan ALFA sama-sama presence:false,
+// jadi laporan bulanan/semester/absensi keluar persis seperti sebelum fitur ini ada.
+// `status` bernilai null artinya BELUM DITANDAI (sesi berjalan, pendamping belum memutuskan).
+export const ATTENDANCE_HADIR = 'HADIR';
+export const ATTENDANCE_SAKIT = 'SAKIT';
+export const ATTENDANCE_ALFA = 'ALFA';
+export const ATTENDANCE_STATUSES = [ATTENDANCE_HADIR, ATTENDANCE_SAKIT, ATTENDANCE_ALFA];
+export const ATTENDANCE_LABELS = { HADIR: 'Hadir', SAKIT: 'Sakit', ALFA: 'Alfa' };
+export const ATTENDANCE_SHORT = { HADIR: 'H', SAKIT: 'S', ALFA: 'A' };

@@ -1,4 +1,4 @@
-import { AID_VALUES } from './constants';
+import { AID_VALUES, ATTENDANCE_HADIR, ATTENDANCE_ALFA, ATTENDANCE_STATUSES } from './constants';
 
 export const formatRupiah = (number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(number);
 
@@ -117,4 +117,49 @@ export const compressImage = (file) => {
       const reader = new FileReader(); reader.readAsDataURL(file);
       reader.onload = (event) => { const img = new Image(); img.src = event.target.result; img.onload = () => { const canvas = document.createElement('canvas'); const MAX_WIDTH = 800; const scaleSize = MAX_WIDTH / img.width; canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }; img.onerror = (err) => reject(err); }; reader.onerror = (err) => reject(err);
   });
+};
+
+// --- STATUS KEHADIRAN (tri-state) ---
+// Semua penulis kehadiran WAJIB lewat withAttendance() supaya `presence` dan `status`
+// tidak pernah berbeda pendapat. pdfGenerator.js hanya membaca `presence`, jadi selama
+// invarian ini dijaga, format cetak yang sudah ditetapkan dinas tidak ikut berubah.
+
+export const isAttendanceStatus = (v) => ATTENDANCE_STATUSES.includes(v);
+
+/** Status pada data KERJA (tab Input). Belum ditandai = null, BUKAN Alfa. */
+export const workingStatus = (kpm) => (isAttendanceStatus(kpm?.status) ? kpm.status : null);
+
+/**
+ * Status pada baris sesi yang SUDAH diarsipkan ke Riwayat.
+ * Sesi lama tidak punya `status`; di sana presence:false sudah berarti "tidak hadir",
+ * jadi diturunkan jadi ALFA — untuk TAMPILAN saja, tidak pernah ditulis balik.
+ */
+export const archivedStatus = (detail) =>
+  isAttendanceStatus(detail?.status) ? detail.status : (detail?.presence ? ATTENDANCE_HADIR : ATTENDANCE_ALFA);
+
+/** true bila status baris riwayat hanya hasil terkaan dari data lama (perlu penanda di UI). */
+export const isLegacyAttendance = (detail) => !isAttendanceStatus(detail?.status);
+
+/**
+ * Tulis status + presence sekaligus. `status` null = kembali ke "belum ditandai".
+ * Penilaian pemahaman mengikuti perilaku lama persis: hadir -> "Baik", selain itu -> "-",
+ * dan penanda koreksi manual direset karena ini aksi manual pendamping.
+ */
+export const withAttendance = (kpm, status) => {
+  const next = isAttendanceStatus(status) ? status : null;
+  const presence = next === ATTENDANCE_HADIR;
+  return { ...kpm, status: next, presence, understanding: presence ? "Baik" : "-", understandingManual: false };
+};
+
+/** Cacah untuk bilah ringkasan di tab Input. */
+export const countAttendance = (list = []) => {
+  const c = { total: list.length, hadir: 0, sakit: 0, alfa: 0, belum: 0 };
+  for (const k of list) {
+    const s = workingStatus(k);
+    if (s === 'HADIR') c.hadir++;
+    else if (s === 'SAKIT') c.sakit++;
+    else if (s === 'ALFA') c.alfa++;
+    else c.belum++;
+  }
+  return c;
 };

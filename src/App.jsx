@@ -12,8 +12,8 @@ import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 // --- IMPORT CONSTANTS, HELPERS, & PDF ---
-import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN } from './utils/constants';
-import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding, findDuplicateKpm } from './utils/helpers';
+import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN, ATTENDANCE_HADIR, ATTENDANCE_SAKIT, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, ATTENDANCE_LABELS } from './utils/constants';
+import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding, findDuplicateKpm, workingStatus, archivedStatus, withAttendance, countAttendance, isAttendanceStatus } from './utils/helpers';
 import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF } from './utils/pdfGenerator';
 import { buildRekapKecamatan, rekapRowValues, downloadRekapXLSX } from './utils/rekapGenerator';
 
@@ -304,7 +304,9 @@ export default function App() {
             if (item.understanding === 'Kurang') understandingCount.kurang++; else if (item.understanding === 'Baik') understandingCount.baik++; else if (item.understanding === 'Sangat Baik') understandingCount.sangatBaik++; else understandingCount.tidakDinilai++;
         }
     });
-    return { total, present, absent: total - present, totalAid, componentsCount, totalComponents, understandingCount };
+    // absent = total - present dipertahankan apa adanya (dipakai kartu "Absen" & cetakan).
+    // Cacah tri-state ditambahkan di sampingnya untuk bilah entri absensi.
+    return { total, present, absent: total - present, totalAid, componentsCount, totalComponents, understandingCount, attendance: countAttendance(filteredData) };
   }, [filteredData]);
 
   const paginatedData = useMemo(() => filteredData.slice(0, visibleCount), [filteredData, visibleCount]);
@@ -335,8 +337,18 @@ export default function App() {
     setData(prev => prev.some(item => item.id === cleanItem.id) ? prev.map(item => item.id === cleanItem.id ? cleanItem : item) : [cleanItem, ...prev]);
     if (user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(cleanItem.id)), cleanItem); }
   };
-  // Toggle kehadiran manual mereset penilaian ke default, jadi penanda koreksi manual ikut dihapus
-  const handleStatusChange = (item) => updateKpmItem({ ...item, presence: !item.presence, understanding: !item.presence ? "Baik" : "-", understandingManual: false });
+  // Entri kehadiran manual (segmen H/S/A di kartu KPM). Mengetuk segmen yang sedang aktif
+  // membatalkannya kembali ke "belum ditandai" — jalan keluar untuk salah tekan.
+  // withAttendance() menjaga `presence` selalu sinkron dengan `status`, dan mereset
+  // penilaian ke default persis seperti toggle hadir/absen yang lama.
+  const handleAttendanceChange = (item, nextStatus) => {
+    const status = workingStatus(item) === nextStatus ? null : nextStatus;
+    updateKpmItem(withAttendance(item, status));
+  };
+  // Jembatan untuk jalur lama yang hanya mengenal hadir/tidak (scan lembar TTD, perintah
+  // chat). Keduanya tidak bisa membedakan sakit dari alfa, jadi "tidak hadir" jatuh ke ALFA —
+  // kecuali pendamping sudah menandai SAKIT lebih dulu, tanda itu tidak ditimpa.
+  const statusDariBoolean = (item, presence) => presence ? ATTENDANCE_HADIR : (workingStatus(item) === ATTENDANCE_SAKIT ? ATTENDANCE_SAKIT : ATTENDANCE_ALFA);
   // Pendamping mengubah dropdown Pemahaman = koreksi manual; penilaian otomatis tidak boleh menimpanya lagi
   const handleUnderstandingChange = (item, newVal) => updateKpmItem({ ...item, understanding: newVal, understandingManual: true });
   // Nilai pemahaman saat kehadiran di-set massal: hormati koreksi manual, lalu aturan otomatis (jika aktif), lalu default lama
@@ -494,8 +506,9 @@ export default function App() {
       const row = rowById.get(item.id);
       if (!row) return item;
       const understanding = massUnderstanding(item, row.presence);
-      if (item.presence === row.presence && item.understanding === understanding) return item;
-      const next = sanitizeForFirestore({ ...item, presence: row.presence, understanding });
+      const status = statusDariBoolean(item, row.presence);
+      if (item.presence === row.presence && item.understanding === understanding && workingStatus(item) === status) return item;
+      const next = sanitizeForFirestore({ ...item, status, presence: row.presence, understanding });
       updates.push(next);
       return next;
     });
@@ -541,14 +554,21 @@ export default function App() {
 
   const handleComponentChange = (key, delta) => { setEditModal(prev => { const comps = prev.data.components || {}; const currentVal = comps[key] || 0; const newVal = Math.max(0, currentVal + delta); return { ...prev, data: { ...prev.data, components: { ...comps, [key]: newVal } } }; }); };
 
-  const handleMarkAllPresent = () => { 
-    if (filteredData.length === 0) return; 
-    showConfirm("Konfirmasi Hadir Semua", "Hadirkan semua KPM di list ini?", async () => { 
-        const updatedData = data.map(item => { const isInFiltered = filteredData.some(f => f.id === item.id); if (isInFiltered && !item.presence) { return { ...item, presence: true, understanding: massUnderstanding(item, true) }; } return item; });
+  // Titik awal entri absensi: tandai satu kelompok hadir semua, lalu pendamping tinggal
+  // mengubah yang sakit/alfa. Ikut menstempel status HADIR — termasuk pada KPM yang
+  // presence-nya sudah true tapi belum punya status (data dari alur lama).
+  const perluStempelHadir = (item) => !item.presence || workingStatus(item) !== ATTENDANCE_HADIR;
+  // Beda dari ketukan manual: aksi massal TIDAK menghapus penanda koreksi manual pemahaman,
+  // jadi nilai yang sudah dibetulkan pendamping tidak tertimpa.
+  const stempelHadirMassal = (item) => ({ ...item, status: ATTENDANCE_HADIR, presence: true, understanding: massUnderstanding(item, true) });
+  const handleMarkAllPresent = () => {
+    if (filteredData.length === 0) return;
+    showConfirm("Konfirmasi Hadir Semua", "Hadirkan semua KPM di list ini?", async () => {
+        const updatedData = data.map(item => { const isInFiltered = filteredData.some(f => f.id === item.id); if (isInFiltered && perluStempelHadir(item)) { return stempelHadirMassal(item); } return item; });
         setData(updatedData);
         if (user && db) {
             const batch = writeBatch(db);
-            filteredData.forEach(item => { if (!item.presence) { const newItem = { ...item, presence: true, understanding: massUnderstanding(item, true) }; const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.set(ref, sanitizeForFirestore(newItem)); } });
+            filteredData.forEach(item => { if (perluStempelHadir(item)) { const newItem = stempelHadirMassal(item); const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.set(ref, sanitizeForFirestore(newItem)); } });
             await batch.commit();
         }
         closeModal(); showToast("Semua KPM ditandai Hadir");
@@ -557,7 +577,7 @@ export default function App() {
 
   const handleAddKPM = () => {
     const newId = Date.now(); const groupToAdd = selectedGroup === "Semua Kelompok" ? (dynamicGroups[1] || "Umum") : selectedGroup;
-    const newItem = { id: newId, name: "", nik: "", noKK: "", bpnt: false, group: groupToAdd, address: "", components: {}, presence: false, understanding: "-", note: "", graduationStatus: null, desa: "", kecamatan: "", kabupaten: "", provinsi: "" };
+    const newItem = { id: newId, name: "", nik: "", noKK: "", bpnt: false, group: groupToAdd, address: "", components: {}, presence: false, status: null, understanding: "-", note: "", graduationStatus: null, desa: "", kecamatan: "", kabupaten: "", provinsi: "" };
     setEditModal({ isOpen: true, data: newItem, isNew: true });
   };
 
@@ -582,7 +602,11 @@ export default function App() {
       let detailsToEdit = [];
       if (historyItem.details) { if (Array.isArray(historyItem.details)) { detailsToEdit = JSON.parse(JSON.stringify(historyItem.details)); } else if (typeof historyItem.details === 'object') { detailsToEdit = Object.values(historyItem.details); } } 
       else { if (historyItem.groupName === "Semua Kelompok") { detailsToEdit = data.map(item => ({ name: item.name, group: item.group, presence: false, understanding: "-" })); } else { detailsToEdit = data.filter(item => item.group === historyItem.groupName).map(item => ({ name: item.name, group: item.group, presence: false, understanding: "-" })); } }
-      setTempHistoryDetails(detailsToEdit); 
+      // Sesi lama tidak menyimpan `status`. Statusnya diturunkan hanya untuk ditampilkan
+      // (presence:false -> ALFA) dan ditandai `statusWarisan` supaya UI bisa bilang
+      // "data lama". `status` sendiri sengaja dibiarkan kosong: tidak ditulis balik
+      // kecuali pendamping benar-benar mengetuk salah satu segmen.
+      setTempHistoryDetails(detailsToEdit.map(d => ({ ...d, statusWarisan: !isAttendanceStatus(d.status) })));
       setTempHistoryMeta({
           tempat: historyItem.tempat || "",
           materi: historyItem.materi || "",
@@ -596,7 +620,19 @@ export default function App() {
   };
 
   const handleTempHistoryChange = (index, field, value) => { const newDetails = [...tempHistoryDetails]; newDetails[index] = { ...newDetails[index], [field]: value }; if (field === 'presence') { if (value === true) newDetails[index].understanding = 'Baik'; else newDetails[index].understanding = '-'; } setTempHistoryDetails(newDetails); };
-  const handleMarkAllTempPresent = (status) => { const newDetails = tempHistoryDetails.map(item => ({ ...item, presence: status, understanding: status ? 'Baik' : '-' })); setTempHistoryDetails(newDetails); };
+  // Entri tri-state di modal edit riwayat. Berbeda dari tab Input, di sini tidak ada
+  // "belum ditandai" — sesinya sudah selesai, jadi setiap ketukan menetapkan status
+  // secara eksplisit sekaligus mencabut penanda "data lama".
+  const handleTempHistoryStatus = (index, status) => {
+    setTempHistoryDetails(prev => prev.map((d, i) => {
+      if (i !== index) return d;
+      const hadir = status === ATTENDANCE_HADIR;
+      // Nilai pemahaman yang sudah dibetulkan pendamping (mis. "Sangat Baik") dipertahankan.
+      const understanding = hadir ? (d.understanding && d.understanding !== '-' ? d.understanding : 'Baik') : '-';
+      return { ...d, status, presence: hadir, understanding, statusWarisan: false };
+    }));
+  };
+  const handleMarkAllTempPresent = (hadir) => { const newDetails = tempHistoryDetails.map(item => ({ ...item, presence: hadir, status: hadir ? ATTENDANCE_HADIR : ATTENDANCE_ALFA, statusWarisan: false, understanding: hadir ? 'Baik' : '-' })); setTempHistoryDetails(newDetails); };
   const handleMarkAllTempBaik = () => { setTempHistoryDetails(prev => prev.map(item => item.presence ? { ...item, understanding: 'Baik' } : item)); };
 
   const handleHistoryPhotoUpload = async (e) => {
@@ -618,7 +654,10 @@ export default function App() {
       if (!editingHistory) return;
       const presentCount = tempHistoryDetails.filter(d => d.presence).length; const totalCount = tempHistoryDetails.length; const absentCount = totalCount - presentCount;
       const { tanggal, ...restMeta } = tempHistoryMeta;
-      const updatedHistoryItem = { ...editingHistory, ...restMeta, date: tanggal || editingHistory.date, details: tempHistoryDetails, stats: { total: totalCount, present: presentCount, absent: absentCount } };
+      // `statusWarisan` cuma penanda tampilan — jangan sampai ikut tersimpan.
+      // eslint-disable-next-line no-unused-vars -- destrukturisasi hanya untuk membuang field transien
+      const detailsToSave = tempHistoryDetails.map(({ statusWarisan, ...d }) => d);
+      const updatedHistoryItem = { ...editingHistory, ...restMeta, date: tanggal || editingHistory.date, details: detailsToSave, stats: { total: totalCount, present: presentCount, absent: absentCount } };
       setHistory(prev => prev.map(h => h.id === editingHistory.id ? updatedHistoryItem : h));
       if (user && db) { try { const histRef = doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(editingHistory.id)); await setDoc(histRef, sanitizeForFirestore(updatedHistoryItem)); showToast("Perubahan Riwayat Disimpan"); } catch (e) { console.error("Update History Error", e); showAlert("Error", "Gagal menyimpan perubahan ke database."); } } else { showToast("Perubahan Riwayat Disimpan (Lokal)"); }
       setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch("");
@@ -716,8 +755,8 @@ export default function App() {
       case 'mark_all': {
         if (groupList.length === 0) return { message: `⚠️ Tidak ada KPM di kelompok "${targetGroup}".` };
         const presence = cmd.presence !== false;
-        const updates = groupList.filter(k => k.presence !== presence);
-        for (const k of updates) await updateKpmItem({ ...k, presence, understanding: presence ? 'Baik' : '-' });
+        const updates = groupList.filter(k => k.presence !== presence || !isAttendanceStatus(k.status));
+        for (const k of updates) await updateKpmItem({ ...k, status: statusDariBoolean(k, presence), presence, understanding: presence ? 'Baik' : '-' });
         return { message: `✅ ${updates.length} KPM di **${targetGroup}** ditandai **${presence ? 'HADIR' : 'TIDAK HADIR'}**.` };
       }
 
@@ -752,7 +791,7 @@ export default function App() {
           nik: (k.nik || '').toString().replace(/\s/g, '').trim(),
           noKK: (k.noKK || '').toString().replace(/\s/g, '').trim(),
           bpnt: k.bpnt === true, group: kpmGroup, address: (k.address || '').trim(),
-          components, presence: false, understanding: '-', note: '', graduationStatus: null,
+          components, presence: false, status: null, understanding: '-', note: '', graduationStatus: null,
           desa: '', kecamatan: '', kabupaten: '', provinsi: ''
         };
         await updateKpmItem(newItem);
@@ -780,7 +819,7 @@ export default function App() {
         for (const name of cmd.names) {
           const res = matchKpmByName(name, groupList);
           if (res.match) {
-            await updateKpmItem({ ...res.match, presence, understanding: presence ? 'Baik' : '-' });
+            await updateKpmItem({ ...res.match, status: statusDariBoolean(res.match, presence), presence, understanding: presence ? 'Baik' : '-' });
             done.push(res.match.name); matchedIds.add(res.match.id);
           } else if (res.candidates.length) {
             ambiguous.push(`❓ "${name}" mirip beberapa nama: ${res.candidates.map(c => c.name).join(', ')}. Sebutkan lebih lengkap.`);
@@ -790,8 +829,8 @@ export default function App() {
         }
 
         if (cmd.othersPresence === true || cmd.othersPresence === false) {
-          const others = groupList.filter(k => !matchedIds.has(k.id) && k.presence !== cmd.othersPresence);
-          for (const k of others) await updateKpmItem({ ...k, presence: cmd.othersPresence, understanding: cmd.othersPresence ? 'Baik' : '-' });
+          const others = groupList.filter(k => !matchedIds.has(k.id) && (k.presence !== cmd.othersPresence || !isAttendanceStatus(k.status)));
+          for (const k of others) await updateKpmItem({ ...k, status: statusDariBoolean(k, cmd.othersPresence), presence: cmd.othersPresence, understanding: cmd.othersPresence ? 'Baik' : '-' });
         }
 
         const parts = [];
@@ -862,7 +901,7 @@ export default function App() {
          if (!clean[1]) continue; // lewati baris tanpa nama (termasuk baris kosong di Excel)
          const components = {}; const parseComp = (idx, key) => { const val = parseInt(clean[idx]); if (!isNaN(val) && val > 0) components[key] = val; };
          parseComp(11, 'balita'); parseComp(12, 'sd'); parseComp(13, 'smp'); parseComp(14, 'sma'); parseComp(15, 'disabilitas'); parseComp(16, 'lansia'); parseComp(17, 'hamil');
-         newData.push(sanitizeForFirestore({ id: currentId++, name: clean[1] || "No Name", noKK: clean[2] || "-", nik: clean[3] || "-", address: clean[4] || "-", group: clean[21] || "Umum", desa: clean[5] || "-", kecamatan: clean[6] || "-", kabupaten: clean[7] || "-", provinsi: clean[8] || "-", bpnt: clean[22] === 'YA', components, presence: false, understanding: '-', note: "", graduationStatus: null }));
+         newData.push(sanitizeForFirestore({ id: currentId++, name: clean[1] || "No Name", noKK: clean[2] || "-", nik: clean[3] || "-", address: clean[4] || "-", group: clean[21] || "Umum", desa: clean[5] || "-", kecamatan: clean[6] || "-", kabupaten: clean[7] || "-", provinsi: clean[8] || "-", bpnt: clean[22] === 'YA', components, presence: false, status: null, understanding: '-', note: "", graduationStatus: null }));
      }
      return newData;
   };
@@ -981,14 +1020,19 @@ export default function App() {
 
   const performArchive = async (list, groupName, cfg) => {
      const present = list.filter(d=>d.presence).length;
-     const sessionDetails = list.map(k => ({ name: k.name, group: k.group, presence: k.presence, understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {}, note: k.note || "" }));
+     // `presence` DIBEKUKAN apa adanya — pdfGenerator.js membacanya dan format cetak
+     // laporan bulanan/semester tidak boleh bergeser. `status` dan `kpmId` murni tambahan:
+     // status dibekukan eksplisit di sini (KPM yang tak pernah ditandai = ALFA, karena
+     // sesinya sudah selesai), kpmId supaya baris riwayat bisa ditelusuri balik ke KPM
+     // tanpa mengandalkan kecocokan nama.
+     const sessionDetails = list.map(k => ({ kpmId: k.id, name: k.name, group: k.group, presence: k.presence, status: archivedStatus(k), understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {}, note: k.note || "" }));
      const newHist = sanitizeForFirestore({ id: Date.now(), date: cfg.tanggal, groupName, materi: cfg.materi, tempat: cfg.tempat, pemateri: cfg.pemateri, fotoKegiatan: cfg.fotoKegiatan, logoKiri: cfg.logoKiri, logoKanan: cfg.logoKanan, stats: { total: list.length, present, absent: list.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
      setHistory(prev => [newHist, ...prev]);
 
      if(user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), newHist); }
 
      const idSet = new Set(list.map(i => i.id));
-     setData(prev => prev.map(item => idSet.has(item.id) ? { ...item, presence: false, understanding: "-", note: "", understandingManual: false } : item));
+     setData(prev => prev.map(item => idSet.has(item.id) ? { ...item, presence: false, status: null, understanding: "-", note: "", understandingManual: false } : item));
 
      if (user && db) {
          const batch = writeBatch(db);
@@ -996,9 +1040,9 @@ export default function App() {
              // Reset ke Firestore untuk KPM yang punya sesuatu untuk dibersihkan.
              // Kondisi understanding/manual ditambahkan agar nilai hasil penilaian otomatis pada
              // KPM yang absen (mis. "Tidak Dapat Dinilai") tidak tertinggal di database setelah reset.
-             if (item.presence || item.note || (item.understanding && item.understanding !== "-") || item.understandingManual) {
+             if (item.presence || item.status || item.note || (item.understanding && item.understanding !== "-") || item.understandingManual) {
                  const docRef = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id));
-                 const cleanItem = { ...item, presence: false, understanding: "-", note: "", understandingManual: false };
+                 const cleanItem = { ...item, presence: false, status: null, understanding: "-", note: "", understandingManual: false };
                  batch.set(docRef, sanitizeForFirestore(cleanItem));
              }
          });
@@ -1237,7 +1281,7 @@ export default function App() {
               selectedModule={selectedModule} setSelectedModule={setSelectedModule} isCompressing={isCompressing}
               handlePhotoUpload={handlePhotoUpload} handleLogoKiriUpload={handleLogoKiriUpload} handleLogoKananUpload={handleLogoKananUpload}
               generateAbsensiPDF={generateAbsensiPDF} isGeneratingPDF={isGeneratingPDF} paginatedData={paginatedData} cardPadding={cardPadding}
-              isCompact={isCompact} cardGap={cardGap} handleStatusChange={handleStatusChange} expandedId={expandedId} setExpandedId={setExpandedId}
+              isCompact={isCompact} cardGap={cardGap} handleAttendanceChange={handleAttendanceChange} expandedId={expandedId} setExpandedId={setExpandedId}
               textSizeBase={textSizeBase} textSizeSub={textSizeSub} renderComponentBadges={renderComponentBadges} handleUnderstandingChange={handleUnderstandingChange}
               openNoteModal={openNoteModal} openEditModal={openEditModal} handleProposeGraduation={handleProposeGraduation}
               handleDeleteKPM={handleDeleteKPM} visibleCount={visibleCount} filteredData={filteredData} mobileLoadMoreRef={mobileLoadMoreRef}
@@ -1567,17 +1611,39 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-y-auto p-4 pt-3 max-w-3xl mx-auto w-full">
                   <div className="space-y-1.5">
-                      {tempHistoryDetails.map((kpm, idx) => ({ kpm, idx })).filter(({ kpm }) => (kpm.name || "").toLowerCase().includes(historyEditSearch.toLowerCase())).map(({ kpm, idx }) => (
-                          <div key={idx} className={`flex items-center gap-2.5 py-1.5 px-2 rounded-xl border ${kpm.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}>
-                              <button onClick={() => handleTempHistoryChange(idx, 'presence', !kpm.presence)} className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${kpm.presence ? 'bg-green-500 text-white shadow-md shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-700 text-gray-300'}`}>{kpm.presence ? <Check strokeWidth={3} size={16}/> : <span className="text-[10px] font-bold">{idx + 1}</span>}</button>
-                              <p className="flex-1 min-w-0 font-bold text-[13px] truncate text-gray-900 dark:text-white">{kpm.name}</p>
+                      {tempHistoryDetails.map((kpm, idx) => ({ kpm, idx })).filter(({ kpm }) => (kpm.name || "").toLowerCase().includes(historyEditSearch.toLowerCase())).map(({ kpm, idx }) => {
+                          const st = archivedStatus(kpm);
+                          const warisan = kpm.statusWarisan === true;
+                          return (
+                          <div key={idx} className={`flex flex-wrap items-center gap-2.5 py-2 px-2 rounded-xl border ${kpm.presence ? 'bg-white dark:bg-gray-800 border-green-200 dark:border-green-900' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}>
+                              <span className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400 text-[10px] font-bold">{idx + 1}</span>
+                              <p className="flex-1 min-w-0 font-bold text-[13px] truncate text-gray-900 dark:text-white">
+                                  {kpm.name}
+                                  {warisan && <span title="Status diturunkan dari data lama yang hanya mencatat hadir/tidak hadir — ketuk salah satu untuk menetapkan" className="ml-1.5 align-middle text-[9px] font-bold px-1.5 py-px rounded-md bg-gray-100 text-gray-500 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">data lama</span>}
+                              </p>
                               <div className="shrink-0 w-28">
                                   <select value={kpm.understanding} onChange={(e) => handleTempHistoryChange(idx, 'understanding', e.target.value)} disabled={!kpm.presence} className="w-full text-[11px] p-1.5 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-blue-500 dark:text-white disabled:opacity-40">
                                       {UNDERSTANDING_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                                   </select>
                               </div>
+                              <div className="w-full grid grid-cols-3 gap-1.5" role="group" aria-label={`Status kehadiran ${kpm.name}`}>
+                                  {ATTENDANCE_STATUSES.map(s => {
+                                      const aktif = st === s;
+                                      const warna = s === ATTENDANCE_HADIR
+                                          ? (aktif ? 'bg-green-600 text-white border-green-600' : 'text-green-700 border-green-200 hover:bg-green-50 dark:text-green-400 dark:border-green-900 dark:hover:bg-green-900/20')
+                                          : s === ATTENDANCE_SAKIT
+                                          ? (aktif ? 'bg-amber-500 text-white border-amber-500' : 'text-amber-700 border-amber-200 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-900 dark:hover:bg-amber-900/20')
+                                          : (aktif ? 'bg-red-500 text-white border-red-500' : 'text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-900/20');
+                                      return (
+                                          <button key={s} onClick={() => handleTempHistoryStatus(idx, s)} aria-pressed={aktif} className={`py-1.5 rounded-lg text-[11px] font-bold border transition active:scale-95 ${aktif ? warna : `bg-transparent ${warna}`} ${aktif && warisan ? 'opacity-70 border-dashed' : ''}`}>
+                                              {ATTENDANCE_LABELS[s]}
+                                          </button>
+                                      );
+                                  })}
+                              </div>
                           </div>
-                      ))}
+                          );
+                      })}
                       {historyEditSearch && tempHistoryDetails.filter(d => (d.name || "").toLowerCase().includes(historyEditSearch.toLowerCase())).length === 0 && (
                           <p className="text-center text-xs text-gray-400 dark:text-gray-500 py-10">Tidak ada nama yang cocok dengan &quot;{historyEditSearch}&quot;.</p>
                       )}
@@ -1585,7 +1651,11 @@ export default function App() {
               </div>
               <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                   <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center sm:justify-between gap-3">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 order-1 sm:order-none"><span className="font-bold text-green-600">{tempHistoryDetails.filter(d => d.presence).length}</span> Hadir, <span className="font-bold text-red-500">{tempHistoryDetails.length - tempHistoryDetails.filter(d => d.presence).length}</span> Absen</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 order-1 sm:order-none">
+                          <span className="font-bold text-green-600">{tempHistoryDetails.filter(d => archivedStatus(d) === ATTENDANCE_HADIR).length}</span> Hadir,{' '}
+                          <span className="font-bold text-amber-600">{tempHistoryDetails.filter(d => archivedStatus(d) === ATTENDANCE_SAKIT).length}</span> Sakit,{' '}
+                          <span className="font-bold text-red-500">{tempHistoryDetails.filter(d => archivedStatus(d) === ATTENDANCE_ALFA).length}</span> Alfa
+                      </div>
                       <div className="flex gap-3 w-full sm:w-auto">
                           <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch(""); }} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">Batal</button>
                           <button onClick={saveHistoryEdit} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition flex items-center justify-center gap-2"><Save size={18}/> Simpan Perubahan</button>
