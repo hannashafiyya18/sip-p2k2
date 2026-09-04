@@ -7,7 +7,8 @@ export const PKH_MODULES = {
   "Kesejahteraan Sosial": ["Sesi 1: Pelayanan Bagi Penyandang Disabilitas Berat", "Sesi 2: Pentingnya Kesejahteraan Lanjut Usia"],
   "Perlindungan Anak": ["Sesi 1: Upaya Pencegahan Kekerasan dan Perilaku Salah Pada Anak", "Sesi 2: Penelantaran dan Eksploitasi Terhadap Anak"],
   "Pengasuhan dan Pendidikan Anak": ["Sesi 1: Menjadi Orangtua Yang Lebih Baik", "Sesi 2: Memahami Perkembangan dan Perilaku Anak", "Sesi 3: Memahami Cara Anak Usia Dini Belajar", "Sesi 4: Membantu Anak Sukses Di Sekolah"],
-  "Pencegahan dan Penanganan Stunting": ["Sesi 1: Permasalahan Stunting", "Sesi 2: Permasalahan Sosial", "Sesi 3: Mendukung Ibu Hamil Mengakses Informasi yang Tepat", "Sesi 4: Mendukung Perawatan Sehari-hari Ibu Hamil", "Sesi 5: Stimulasi pada Janin", "Sesi 6: Kesejahteraan Bayi Baru Lahir & Ibu Menyusui", "Sesi 7: Stimulasi Bayi Baru Lahir", "Sesi 8: Stimulasi Bayi 6-12 Bulan", "Sesi 9: Stimulasi Anak 1-2 Tahun", "Sesi 10: Stimulasi Anak 2-6 Tahun", "Sesi 11: Pemanfaatan Bantuan Sosial", "Sesi 12: Mendukung Praktik Cuci Tangan", "Sesi 13: Pemetaan Potensi Diri", "Sesi 14: Sistem Rujukan Stunting", "Sesi 15: Rencana Tindak Lanjut"]
+  "Pencegahan dan Penanganan Stunting": ["Sesi 1: Permasalahan Stunting", "Sesi 2: Permasalahan Sosial", "Sesi 3: Mendukung Ibu Hamil Mengakses Informasi yang Tepat", "Sesi 4: Mendukung Perawatan Sehari-hari Ibu Hamil", "Sesi 5: Stimulasi pada Janin", "Sesi 6: Kesejahteraan Bayi Baru Lahir & Ibu Menyusui", "Sesi 7: Stimulasi Bayi Baru Lahir", "Sesi 8: Stimulasi Bayi 6-12 Bulan", "Sesi 9: Stimulasi Anak 1-2 Tahun", "Sesi 10: Stimulasi Anak 2-6 Tahun", "Sesi 11: Pemanfaatan Bantuan Sosial", "Sesi 12: Mendukung Praktik Cuci Tangan", "Sesi 13: Pemetaan Potensi Diri", "Sesi 14: Sistem Rujukan Stunting", "Sesi 15: Rencana Tindak Lanjut"],
+  "P2K2 Adaptif / Materi Tambahan": []
 };
 
 export const INITIAL_DATA = [];

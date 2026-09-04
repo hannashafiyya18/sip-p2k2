@@ -196,11 +196,19 @@ export default function InputTab({
                                   <select className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" onChange={e => { setSelectedModule(e.target.value); if(e.target.value !== selectedModule) handleConfigChange('materi', ''); }} value={selectedModule}>
                                      <option value="">Pilih Modul...</option>{Object.keys(PKH_MODULES).map(m => <option key={m} value={m}>{m}</option>)}
                                   </select>
-                                  {selectedModule && (
+                                  {selectedModule === "P2K2 Adaptif / Materi Tambahan" ? (
+                                     <input 
+                                         type="text" 
+                                         placeholder="Ketik topik materi (misal: Literasi Keuangan Digital)..." 
+                                         className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white placeholder-gray-400" 
+                                         value={currentConfig.materi ? currentConfig.materi.split(`Modul ${selectedModule} - `)[1] || "" : ""} 
+                                         onChange={e => handleConfigChange('materi', e.target.value ? `Modul ${selectedModule} - ${e.target.value}` : '')}
+                                     />
+                                  ) : selectedModule ? (
                                      <select className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" value={currentConfig.materi ? currentConfig.materi.split(`Modul ${selectedModule} - `)[1] || "" : ""} onChange={e => handleConfigChange('materi', e.target.value ? `Modul ${selectedModule} - ${e.target.value}` : '')}>
                                         <option value="">Pilih Sesi...</option>{PKH_MODULES[selectedModule].map(s => <option key={s} value={s}>{s}</option>)}
                                      </select>
-                                  )}
+                                  ) : null}
                               </div>
                               <div className="space-y-1.5">
                                   <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><Camera size={13} className="text-orange-500"/> Foto Kegiatan</label>
