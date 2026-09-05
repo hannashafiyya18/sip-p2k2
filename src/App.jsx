@@ -26,8 +26,6 @@ import HistoryTab from './components/tabs/HistoryTab';
 import GraduasiTab from './components/tabs/GraduasiTab';
 import ChatBot from './components/layout/ChatBot';
 
-// --- IMPORT AI SERVICES ---
-// import { generateJournalSummary, predictGraduation, parseAisearchQuery } from './services/ai';
 import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
 
 // --- KOMPONEN BANTUAN UI ---
@@ -53,6 +51,7 @@ export default function App() {
   // Menandai snapshot pertama dari Firestore sudah tiba. Dipakai layar penyelamatan sesi
   // Tamu agar tidak menyimpulkan "tidak ada data" saat datanya sebenarnya masih dimuat.
   const [cloudLoaded, setCloudLoaded] = useState(false);
+  const [cloudOffline, setCloudOffline] = useState(false); // true saat listener Firestore gagal (offline/banner)
   const [viewSettings, setViewSettings] = useState(() => { try { const saved = localStorage.getItem(STORAGE_KEY_VIEW_SETTINGS); return saved ? JSON.parse(saved) : { theme: 'light', density: 'normal' }; } catch { return { theme: 'light', density: 'normal' }; } });
   const [showViewMenu, setShowViewMenu] = useState(false); 
   const [data, setData] = useState([]);
@@ -176,13 +175,29 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Listener Firestore gagal (offline lama / kuota / rules): jangan biarkan layar diam-diam
+  // menampilkan daftar kosong. Muat cadangan lokal sebagai tampilan sementara + tandai mode
+  // offline (banner). Snapshot sukses berikutnya (koneksi pulih) menonaktifkan banner.
+  const handleListenerError = (label, err) => {
+    console.error(`Listener ${label} gagal`, err);
+    try {
+      const savedData = localStorage.getItem(STORAGE_KEY_DATA);
+      if (savedData) { const parsed = JSON.parse(savedData); if (Array.isArray(parsed)) setData(prev => (prev.length > 0 ? prev : parsed)); }
+      const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
+      if (savedHistory) { const parsedH = JSON.parse(savedHistory); if (Array.isArray(parsedH)) setHistory(prev => (prev.length > 0 ? prev : parsedH)); }
+    } catch { /* biarkan apa adanya */ }
+    setCloudLoaded(true); // hentikan spinner abadi (termasuk layar penyelamatan sesi Tamu)
+    setCloudOffline(true);
+  };
+
   useEffect(() => {
     if (user && db) {
         setCloudLoaded(false);
+        setCloudOffline(false);
         const qData = query(collection(db, `artifacts/${appId}/users/${user.uid}/kpm_data`));
-        const unsubData = onSnapshot(qData, (snapshot) => { const items = []; snapshot.forEach(doc => items.push(doc.data())); setData(items.length > 0 ? items.sort((a,b) => a.name.localeCompare(b.name)) : []); setCloudLoaded(true); });
+        const unsubData = onSnapshot(qData, (snapshot) => { const items = []; snapshot.forEach(doc => items.push(doc.data())); setData(items.length > 0 ? items.sort((a,b) => a.name.localeCompare(b.name)) : []); setCloudLoaded(true); setCloudOffline(false); }, (err) => handleListenerError('data KPM', err));
         const qHist = query(collection(db, `artifacts/${appId}/users/${user.uid}/history`));
-        const unsubHist = onSnapshot(qHist, (snapshot) => { const items = []; snapshot.forEach(doc => items.push(doc.data())); setHistory(items.sort((a,b) => b.id - a.id)); });
+        const unsubHist = onSnapshot(qHist, (snapshot) => { const items = []; snapshot.forEach(doc => items.push(doc.data())); setHistory(items.sort((a,b) => b.id - a.id)); setCloudOffline(false); }, (err) => handleListenerError('riwayat', err));
         return () => { unsubData(); unsubHist(); };
     }
   }, [user]);
@@ -334,8 +349,22 @@ export default function App() {
   // DATA ACTIONS
   const updateKpmItem = async (updatedItem) => {
     const cleanItem = sanitizeForFirestore(updatedItem);
+    const prevItem = data.find(item => item.id === cleanItem.id) || null;
     setData(prev => prev.some(item => item.id === cleanItem.id) ? prev.map(item => item.id === cleanItem.id ? cleanItem : item) : [cleanItem, ...prev]);
-    if (user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(cleanItem.id)), cleanItem); }
+    if (user && db) {
+      try {
+        await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(cleanItem.id)), cleanItem);
+        return true;
+      } catch (e) {
+        // Tulis cloud gagal (izin/rules/sinyal putus): batalkan perubahan optimistik supaya
+        // layar jujur terhadap isi cloud — data tidak boleh tampak tersimpan padahal tidak sampai.
+        console.error("Gagal menyimpan ke cloud", e);
+        setData(prev => prevItem ? prev.map(item => item.id === cleanItem.id ? prevItem : item) : prev.filter(item => item.id !== cleanItem.id));
+        showToast("Gagal tersimpan ke cloud — periksa koneksi. Perubahan dibatalkan.", 'warning');
+        return false;
+      }
+    }
+    return true; // mode lokal: tersimpan di state + cache
   };
   // Entri kehadiran manual (segmen H/S/A di kartu KPM). Mengetuk segmen yang sedang aktif
   // membatalkannya kembali ke "belum ditandai" — jalan keluar untuk salah tekan.
@@ -355,11 +384,22 @@ export default function App() {
   const massUnderstanding = (item, presence) => item.understandingManual === true ? item.understanding : (autoAssess ? deriveUnderstanding(item, presence) : (presence ? "Baik" : "-"));
   const saveNote = () => { const item = data.find(i => i.id === noteModal.kpmId); if (item) { updateKpmItem({ ...item, note: noteModal.text, noteUpdatedAt: Date.now() }); showToast("Catatan disimpan"); } closeNoteModal(); };
   const deleteNote = (item) => updateKpmItem({ ...item, note: "", noteUpdatedAt: null });
+  // Simpan hasil modal Tambah/Edit KPM. NIK yang sudah dipakai KPM lain ditahan dulu dengan
+  // konfirmasi — data ganda dicegah di hulu, bukan dibersihkan belakangan lewat alat manual.
+  const commitKpmSave = async () => {
+    const ok = await updateKpmItem({ ...editModal.data, name: editModal.data.name.trim(), group: (editModal.data.group || "").trim() || "Umum" });
+    closeEditModal();
+    if (ok !== false) showToast(editModal.isNew ? "KPM baru berhasil ditambahkan" : "Data berhasil diperbarui");
+  };
   const saveEditedKPM = () => {
     if (!editModal.data.name || !editModal.data.name.trim()) { showAlert("Nama Kosong", "Nama lengkap KPM wajib diisi."); return; }
-    updateKpmItem({ ...editModal.data, name: editModal.data.name.trim(), group: (editModal.data.group || "").trim() || "Umum" });
-    closeEditModal();
-    showToast(editModal.isNew ? "KPM baru berhasil ditambahkan" : "Data berhasil diperbarui");
+    const nik = String(editModal.data.nik || '').replace(/\D/g, '');
+    const dupe = nik.length === 16 ? data.find(k => k.id !== editModal.data.id && String(k.nik || '').replace(/\D/g, '') === nik) : null;
+    if (dupe) {
+      showConfirm("NIK Sudah Terdaftar", `NIK ${nik} sudah dipakai oleh "${dupe.name}". Tetap simpan?`, commitKpmSave, 'primary');
+      return;
+    }
+    commitKpmSave();
   };
   const handleEditChange = (field, value) => setEditModal(prev => ({ ...prev, data: { ...prev.data, [field]: value } }));
 
@@ -566,12 +606,19 @@ export default function App() {
     showConfirm("Konfirmasi Hadir Semua", "Hadirkan semua KPM di list ini?", async () => {
         const updatedData = data.map(item => { const isInFiltered = filteredData.some(f => f.id === item.id); if (isInFiltered && perluStempelHadir(item)) { return stempelHadirMassal(item); } return item; });
         setData(updatedData);
-        if (user && db) {
-            const batch = writeBatch(db);
-            filteredData.forEach(item => { if (perluStempelHadir(item)) { const newItem = stempelHadirMassal(item); const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.set(ref, sanitizeForFirestore(newItem)); } });
-            await batch.commit();
+        closeModal();
+        try {
+            if (user && db) {
+                const batch = writeBatch(db);
+                filteredData.forEach(item => { if (perluStempelHadir(item)) { const newItem = stempelHadirMassal(item); const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.set(ref, sanitizeForFirestore(newItem)); } });
+                await batch.commit();
+            }
+            showToast("Semua KPM ditandai Hadir");
+        } catch (e) {
+            console.error("Hadir semua gagal", e);
+            setData(data); // batalkan aksi massal — layar jujur terhadap isi cloud
+            showToast("Gagal tersimpan ke cloud — periksa koneksi. Perubahan dibatalkan.", 'warning');
         }
-        closeModal(); showToast("Semua KPM ditandai Hadir");
     }, 'primary');
   };
 
@@ -581,22 +628,45 @@ export default function App() {
     setEditModal({ isOpen: true, data: newItem, isNew: true });
   };
 
-  const handleDeleteKPM = async (id) => showConfirm("Hapus Data", "Permanen?", async () => { if (user && db) await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(id))); else setData(prev => prev.filter(item => item.id !== id)); closeModal(); showToast("Dihapus"); });
+  const handleDeleteKPM = async (id) => showConfirm("Hapus Data", "Permanen?", async () => {
+    try {
+      if (user && db) { await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(id))); }
+      else { setData(prev => prev.filter(item => item.id !== id)); }
+      closeModal(); showToast("Dihapus");
+    } catch (e) {
+      console.error("Hapus KPM gagal", e);
+      showToast("Gagal menghapus — periksa koneksi.", 'warning');
+    }
+  });
   const handleDeleteAllData = async () => {
     showConfirm("Hapus SEMUA Data KPM?", "Tindakan ini akan menghapus SELURUH data KPM Anda secara permanen. Data tidak bisa dikembalikan.", async () => {
-        if (user && db) {
-            const chunkSize = 400; 
-            for (let i = 0; i < data.length; i += chunkSize) {
-                const chunk = data.slice(i, i + chunkSize); const batch = writeBatch(db);
-                chunk.forEach(item => { const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.delete(ref); });
-                await batch.commit();
+        closeModal();
+        try {
+            if (user && db) {
+                const chunkSize = 400; 
+                for (let i = 0; i < data.length; i += chunkSize) {
+                    const chunk = data.slice(i, i + chunkSize); const batch = writeBatch(db);
+                    chunk.forEach(item => { const ref = doc(db, `artifacts/${appId}/users/${user.uid}/kpm_data`, String(item.id)); batch.delete(ref); });
+                    await batch.commit();
+                }
             }
+            setData([]); showToast("Semua data KPM berhasil dihapus");
+        } catch (e) {
+            console.error("Hapus semua data gagal", e);
+            showToast("Gagal menghapus — periksa koneksi. Data tidak diubah.", 'warning');
         }
-        setData([]); closeModal(); showToast("Semua data KPM berhasil dihapus");
     });
   };
 
-  const handleDeleteHistory = async (id) => { showConfirm("Hapus Riwayat", "Data ini akan dihapus permanen. Lanjutkan?", async () => { if (user && db) { await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(id))); } setHistory(prev => prev.filter(h => h.id !== id)); closeModal(); showToast("Riwayat dihapus"); }); };
+  const handleDeleteHistory = async (id) => { showConfirm("Hapus Riwayat", "Data ini akan dihapus permanen. Lanjutkan?", async () => {
+    try {
+      if (user && db) { await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(id))); }
+      setHistory(prev => prev.filter(h => h.id !== id)); closeModal(); showToast("Riwayat dihapus");
+    } catch (e) {
+      console.error("Hapus riwayat gagal", e);
+      showToast("Gagal menghapus — periksa koneksi.", 'warning');
+    }
+  }); };
 
   const handleEditHistory = (historyItem) => {
       let detailsToEdit = [];
@@ -1267,6 +1337,15 @@ export default function App() {
         setViewSettings={setViewSettings} setShowReportConfig={setShowReportConfig} setIsConfigOpen={setIsConfigOpen}
         user={user} handleLogin={handleLogin} handleLogout={handleLogout}
       />
+
+      {cloudOffline && (
+        <div className="max-w-7xl mx-auto px-4 pt-4 -mb-2">
+          <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200/80 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-xs font-semibold text-amber-800 dark:text-amber-300 leading-relaxed">
+            <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+            <span>Koneksi ke cloud terputus — daftar yang tampil adalah cadangan lokal. Perubahan belum tentu tersimpan sampai koneksi pulih.</span>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {activeTab === 'input' && (
