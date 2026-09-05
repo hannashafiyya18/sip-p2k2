@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff, ClipboardList, CheckCircle, AlertTriangle, Plus } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff, ClipboardList, CheckCircle, AlertTriangle, Plus, Send, Upload } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import { useReveal } from '../../hooks/useReveal';
 import { avatarColorFor } from '../../utils/avatar';
@@ -13,11 +13,12 @@ export default function HistoryTab({
   semesterGroup, generateSemesterPDF, filteredHistory, setShowHistoryGroupFilter,
   historyFilterGroup, historyFilterYear, setHistoryFilterYear,
   historyFilterMonth, setHistoryFilterMonth, textColor, cardColor,
-  handleEditHistory, handleDeleteHistory,
+  handleEditHistory, handleDeleteHistory, onExportSiks, onImportSiksResult,
   isRekapOpen, setIsRekapOpen, rekapMonth, rekapYear, setRekapYear, setShowRekapMonthModal, handleBuildRekap,
   historyCoverage, handleInputKelompok
 }) {
   const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
+  const importSiksRef = useRef(null);
   const [showSudah, setShowSudah] = useState(false);
   const NAMA_BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const tanggalPendek = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }); };
@@ -120,9 +121,13 @@ export default function HistoryTab({
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 sticky top-[74px] z-30 mb-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <input ref={importSiksRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { if (e.target.files && e.target.files[0]) onImportSiksResult(e.target.files[0]); e.target.value = ""; }} />
+            <div className="flex items-center justify-between gap-2">
                  <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-sm"><Filter size={16} className="text-blue-600"/> Filter Sesi</h3>
-                 <span className="text-[10px] bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full font-extrabold border border-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">{filteredHistory.length} Sesi Ditemukan</span>
+                 <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => importSiksRef.current && importSiksRef.current.click()} title="Tandai sesi yang sudah diinput bot SIKS-NG (pilih status-sudah-*.json dari p2k2-siks-bot)" className="inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-1.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 active:scale-[0.97] transition dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900"><Upload size={11}/> Impor Hasil Bot</button>
+                    <span className="text-[10px] bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full font-extrabold border border-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">{filteredHistory.length} Sesi Ditemukan</span>
+                 </div>
             </div>
 
             <div className="flex gap-2 w-full">
@@ -261,8 +266,14 @@ export default function HistoryTab({
                             <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
                                 <CalendarDays size={11} className="shrink-0"/> {formatTanggal(h.date)}
                             </span>
+                            {h.siks === 'sudah' && (
+                                <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900" title="Sesi ini sudah ditandai diinput ke SIKS-NG"><CheckCircle size={11}/> Sudah SIKS</span>
+                            )}
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(h.id); }} className="shrink-0 p-2 -mt-1 -mr-1 rounded-lg text-gray-300 dark:text-gray-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Hapus Riwayat" aria-label="Hapus Riwayat"><Trash2 size={15} /></button>
+                        <div className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1">
+                            <button onClick={(e) => { e.stopPropagation(); onExportSiks(h); }} className="p-2 rounded-lg text-gray-300 dark:text-gray-600 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition" title="Export SIKS-NG (file JSON untuk bot p2k2-siks)" aria-label="Export SIKS-NG"><Send size={15} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(h.id); }} className="p-2 rounded-lg text-gray-300 dark:text-gray-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Hapus Riwayat" aria-label="Hapus Riwayat"><Trash2 size={15} /></button>
+                        </div>
                     </div>
 
                     <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2rem]">{h.materi || '—'}</p>

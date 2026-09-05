@@ -1,4 +1,21 @@
-import { AID_VALUES, ATTENDANCE_HADIR, ATTENDANCE_ALFA, ATTENDANCE_STATUSES } from './constants';
+import { AID_VALUES, ATTENDANCE_HADIR, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, SIKS_MATERI } from './constants';
+
+/**
+ * Tebak kategori Materi SIKS dari materi/modul sip-p2k2 (dipakai sebagai default
+ * saat export SIKS-NG — pendamping tetap bisa memilih kategori lain di dialog
+ * export). Murni perkiraan berbasis kata kunci; bukan aturan resmi.
+ * @returns salah satu teks dari SIKS_MATERI
+ */
+export const guessSiksMateri = (materiLama, fallbackIndex = 0) => {
+  const t = String(materiLama || '').toLowerCase();
+  const kata = (arr) => arr.some((w) => t.includes(w));
+  let idx = -1;
+  if (kata(['pinjam', 'menabung', 'usaha', 'pengelolaan keuangan'])) idx = 1;      // PENGELOLAAN KEUANGAN
+  else if (kata(['gizi', 'kesehatan', 'stunting', 'ibu hamil', 'menyusui', 'imunisasi'])) idx = 2; // KESEHATAN DAN GIZI
+  else if (kata(['kesejahteraan sosial', 'disabilitas', 'lansia', 'lanjut usia', 'perlindungan anak', 'kekerasan', 'penelantaran', 'eksploitasi', 'pengasuhan', 'pendidikan anak'])) idx = 3; // KESEJAHTERAAN SOSIAL (layanan sosial)
+  else if (kata(['adaptif', 'materi tambahan', 'isu'])) idx = 5;                    // P2K2 ADAPTIF
+  return idx >= 0 ? SIKS_MATERI[idx] : (SIKS_MATERI[fallbackIndex] || SIKS_MATERI[0]);
+};
 
 export const formatRupiah = (number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(number);
 

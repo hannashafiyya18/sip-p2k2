@@ -12,7 +12,7 @@ import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 // --- IMPORT CONSTANTS, HELPERS, & PDF ---
-import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN, ATTENDANCE_HADIR, ATTENDANCE_SAKIT, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, ATTENDANCE_LABELS } from './utils/constants';
+import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN, ATTENDANCE_HADIR, ATTENDANCE_SAKIT, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, ATTENDANCE_LABELS, SIKS_MATERI } from './utils/constants';
 import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding, findDuplicateKpm, workingStatus, archivedStatus, withAttendance, countAttendance, isAttendanceStatus } from './utils/helpers';
 import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF } from './utils/pdfGenerator';
 import { buildRekapKecamatan, rekapRowValues, downloadRekapXLSX } from './utils/rekapGenerator';
@@ -27,6 +27,7 @@ import GraduasiTab from './components/tabs/GraduasiTab';
 import ChatBot from './components/layout/ChatBot';
 
 import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
+import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, bacaIdsSukses } from './utils/siksGenerator';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -130,6 +131,9 @@ export default function App() {
   const [modal, setModal] = useState({ isOpen: false, type: 'alert', title: '', message: '', onConfirm: null });
   const [noteModal, setNoteModal] = useState({ isOpen: false, kpmId: null, kpmName: '', text: '' });
   const [editModal, setEditModal] = useState({ isOpen: false, data: null });
+  // Export SIKS-NG (per sesi riwayat) & impor hasil bot p2k2-siks
+  const [exportSiks, setExportSiks] = useState(null);         // sesi riwayat yang sedang diexport
+  const [exportSiksForm, setExportSiksForm] = useState(null); // isian formulir export (default bisa diedit)
   // const [isAiLoading, setIsAiLoading] = useState(false);
 
   // EFFECTS
@@ -667,6 +671,51 @@ export default function App() {
       showToast("Gagal menghapus — periksa koneksi.", 'warning');
     }
   }); };
+
+  // --- EXPORT SIKS-NG & IMPOR HASIL BOT (p2k2-siks-bot) ---
+  const openExportSiks = (h) => {
+    setExportSiks(h);
+    setExportSiksForm(defaultFormExport(h, currentConfig.pendamping || DEFAULT_CONFIG.pendamping));
+  };
+  const closeExportSiks = () => { setExportSiks(null); setExportSiksForm(null); };
+  const setExportField = (key, value) => setExportSiksForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+
+  const doExportSiks = () => {
+    if (!exportSiks || !exportSiksForm) return;
+    const res = buildExportKegiatan(exportSiks, exportSiksForm);
+    if (res.masalah.length) { showAlert("Export Belum Bisa", res.masalah.join("\n")); return; }
+    const fname = namaFileExport(exportSiks, exportSiksForm.tanggal);
+    unduhJson(fname, res.json);
+    closeExportSiks();
+    showToast(`File ${fname} diunduh — siap diinput bot (${res.pesertaCount} peserta)`);
+  };
+
+  // Baca status-sudah-*.json / hasil-*.json dari p2k2-siks-bot → tandai sesi "Sudah SIKS"
+  const handleImportSiksResult = (file) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      let data;
+      try { data = JSON.parse(reader.result); } catch { showAlert("File Tidak Valid", "Bukan JSON hasil bot. Pilih file status-sudah-*.json dari folder p2k2-siks-bot."); return; }
+      const ids = bacaIdsSukses(data);
+      const cocok = history.filter((h) => ids.includes(String(h.id)));
+      if (cocok.length === 0) { showAlert("Tidak Ada yang Cocok", "File hasil bot tidak memuat kegiatan.id dari Riwayat ini. Pastikan file berasal dari p2k2-siks-bot yang sama dengan export-nya."); return; }
+      const daftar = cocok.slice(0, 4).map((h) => h.groupName).join(', ');
+      const pesanSiks = `${cocok.length} sesi akan ditandai "Sudah SIKS": ${daftar}` + (cocok.length > 4 ? ', +' + (cocok.length - 4) + ' lagi' : '');
+      showConfirm("Tandai Sudah Diinput SIKS-NG?", pesanSiks, async () => {
+        const idSet = new Set(cocok.map((h) => String(h.id)));
+        setHistory((prev) => prev.map((h) => (idSet.has(String(h.id)) ? { ...h, siks: 'sudah' } : h)));
+        if (user && db) {
+          let okN = 0;
+          for (const h of cocok) {
+            try { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(h.id)), sanitizeForFirestore({ ...h, siks: 'sudah' })); okN++; }
+            catch (e) { console.error("Tandai SIKS gagal", e); }
+          }
+          showToast(okN === cocok.length ? `${okN} sesi ditandai Sudah SIKS` : `${okN}/${cocok.length} tersimpan ke cloud — jalankan sekali lagi utk sisanya`, okN === cocok.length ? 'success' : 'warning');
+        } else { showToast(`${cocok.length} sesi ditandai Sudah SIKS (lokal)`); }
+      }, 'primary');
+    };
+    reader.readAsText(file);
+  };
 
   const handleEditHistory = (historyItem) => {
       let detailsToEdit = [];
@@ -1256,6 +1305,82 @@ export default function App() {
       </div>
   );
 
+  // --- MODAL EXPORT SIKS-NG (satu sesi riwayat -> file JSON kontrak v2) ---
+  const exportSiksNode = exportSiks && exportSiksForm && (() => {
+    const exs = buildExportKegiatan(exportSiks, exportSiksForm);
+    const inp = "w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm";
+    const lbl = "text-xs font-bold text-gray-400 block mb-1";
+    return (
+      <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+        <div className="bg-white dark:bg-gray-800 w-full sm:max-w-2xl h-[92vh] sm:h-auto sm:max-h-[92vh] rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 overflow-y-auto animate-in slide-in-from-bottom-10 shadow-2xl">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-bold text-lg dark:text-white leading-tight">Export SIKS-NG</h3>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Sesi: <b className="text-gray-600 dark:text-gray-300">{exportSiks.groupName}</b> · {exportSiks.date} · {exportSiks.details ? exportSiks.details.length : 0} peserta</p>
+            </div>
+            <button onClick={closeExportSiks} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full shrink-0" aria-label="Tutup"><X size={18} className="dark:text-white"/></button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className={`rounded-xl px-3 py-2 text-center ${exs.statHadir ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/60'}`}><p className="text-[10px] font-bold text-gray-400 uppercase">Hadir</p><p className="text-sm font-extrabold text-green-600 dark:text-green-400">{exs.statHadir}</p></div>
+            <div className={`rounded-xl px-3 py-2 text-center ${exs.statSakit ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-gray-50 dark:bg-gray-800/60'}`}><p className="text-[10px] font-bold text-gray-400 uppercase">Sakit</p><p className="text-sm font-extrabold text-amber-600 dark:text-amber-400">{exs.statSakit}</p></div>
+            <div className={`rounded-xl px-3 py-2 text-center ${exs.statAlfa ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-800/60'}`}><p className="text-[10px] font-bold text-gray-400 uppercase">Alfa</p><p className="text-sm font-extrabold text-red-600 dark:text-red-400">{exs.statAlfa}</p></div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className={lbl}>Nama Kegiatan <span className="text-red-500">*</span></label>
+              <input type="text" value={exportSiksForm.nama || ""} onChange={(e) => setExportField('nama', e.target.value)} className={inp} placeholder="Nama kegiatan di form SIKS..." />
+            </div>
+
+            <div>
+              <label className={lbl}>Materi (kategori SIKS) <span className="text-red-500">*</span></label>
+              <select value={exportSiksForm.materiSiks || ""} onChange={(e) => setExportField('materiSiks', e.target.value)} className={`${inp} ${exportSiksForm.materiSiks && exportSiksForm.materiSiks.length > 60 ? 'text-[11px] leading-snug' : ''}`}>
+                {SIKS_MATERI.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-1">Default ditebak dari materi sesi ("{String(exportSiks.materi || '').slice(0, 60)}{String(exportSiks.materi || '').length > 60 ? '…' : ''}") — bisa diganti.</p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div><label className={lbl}>Tanggal</label><input type="date" value={exportSiksForm.tanggal || ""} onChange={(e) => setExportField('tanggal', e.target.value)} className={inp} /></div>
+              <div><label className={lbl}>Jam Mulai</label><input type="time" value={exportSiksForm.jamMulai || ""} onChange={(e) => setExportField('jamMulai', e.target.value)} className={inp} /></div>
+              <div><label className={lbl}>Jam Selesai</label><input type="time" value={exportSiksForm.jamSelesai || ""} onChange={(e) => setExportField('jamSelesai', e.target.value)} className={inp} /></div>
+              <div><label className={lbl}>Tempat</label><input type="text" value={exportSiksForm.tempat || ""} onChange={(e) => setExportField('tempat', e.target.value)} className={inp} /></div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><label className={lbl}>Nama Pemateri</label><input type="text" value={exportSiksForm.pemateriNama || ""} onChange={(e) => setExportField('pemateriNama', e.target.value)} className={inp} placeholder="Nama pemateri..." /></div>
+              <div><label className={lbl}>Instansi Pemateri</label><input type="text" value={exportSiksForm.pemateriInstansi || ""} onChange={(e) => setExportField('pemateriInstansi', e.target.value)} className={inp} /></div>
+            </div>
+
+            <div>
+              <label className={lbl}>Uraian Kegiatan <span className="text-red-500">*</span> <span className={`normal-case font-semibold ${exs.kataUraian > 500 ? 'text-red-500' : 'text-gray-400'}`}>({exs.kataUraian}/500 kata)</span></label>
+              <textarea rows={6} value={exportSiksForm.uraian || ""} onChange={(e) => setExportField('uraian', e.target.value)} className={`${inp} resize-none leading-relaxed`} placeholder="Uraian kegiatan (maks 500 kata)..." />
+            </div>
+
+            <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 px-3.5 py-2.5 text-[11px] leading-relaxed text-blue-700 dark:text-blue-300">
+              📷 <b>Foto & dokumen pendukung tidak ikut di file ini</b> — foto kegiatan wajib geotag ≤500 KB diambil manual. Bila perlu, buka file JSON yang terunduh lalu isi <code className="bg-white/60 dark:bg-gray-900/60 px-1 rounded">dokumen.fotoKegiatan</code> dengan path file lokal sebelum dijalankan bot.
+            </div>
+
+            {exs.peringatan.length > 0 && (
+              <div className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">⚠️ {exs.peringatan.join(' ')}</div>
+            )}
+            {exs.masalah.length > 0 && (
+              <div className="text-[11px] text-red-600 dark:text-red-400 font-bold leading-relaxed">✋ {exs.masalah.join(' ')}</div>
+            )}
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button onClick={closeExportSiks} className="flex-1 py-3.5 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">Batal</button>
+            <button onClick={doExportSiks} disabled={exs.masalah.length > 0} className="flex-[2] py-3.5 rounded-xl font-bold bg-blue-600 text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+              <Download size={16}/> Unduh File Export (.json)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  })();
+
   const kartuLayar = "w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-7 text-center";
 
   // Belum ada sesi: aplikasi mensyaratkan akun Google agar data tersinkron antar perangkat.
@@ -1396,6 +1521,7 @@ export default function App() {
               historyFilterGroup={historyFilterGroup} historyFilterYear={historyFilterYear} setHistoryFilterYear={setHistoryFilterYear}
               historyFilterMonth={historyFilterMonth} setHistoryFilterMonth={setHistoryFilterMonth} textColor={textColor} cardColor={cardColor}
               handleEditHistory={handleEditHistory} handleDeleteHistory={handleDeleteHistory}
+              onExportSiks={openExportSiks} onImportSiksResult={handleImportSiksResult}
               isRekapOpen={isRekapOpen} setIsRekapOpen={setIsRekapOpen} rekapMonth={rekapMonth} rekapYear={rekapYear}
               setRekapYear={setRekapYear} setShowRekapMonthModal={setShowRekapMonthModal} handleBuildRekap={handleBuildRekap}
               historyCoverage={historyCoverage} handleInputKelompok={handleInputKelompok}
@@ -1406,6 +1532,8 @@ export default function App() {
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <ChatBot stats={stats} dynamicGroups={dynamicGroups} onAgentCommand={handleAgentCommand} />
+
+      {exportSiksNode}
 
       {/* --- LINGERING MODALS & POP-UPS --- */}
       {toastNode}
