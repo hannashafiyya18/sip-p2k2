@@ -1145,7 +1145,7 @@ export default function App() {
      // sesinya sudah selesai), kpmId supaya baris riwayat bisa ditelusuri balik ke KPM
      // tanpa mengandalkan kecocokan nama.
      const sessionDetails = list.map(k => ({ kpmId: k.id, name: k.name, group: k.group, presence: k.presence, status: archivedStatus(k), understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {}, note: k.note || "" }));
-     const newHist = sanitizeForFirestore({ id: Date.now(), date: cfg.tanggal, groupName, materi: cfg.materi, tempat: cfg.tempat, pemateri: cfg.pemateri, fotoKegiatan: cfg.fotoKegiatan, logoKiri: cfg.logoKiri, logoKanan: cfg.logoKanan, stats: { total: list.length, present, absent: list.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
+     const newHist = sanitizeForFirestore({ id: Date.now(), date: cfg.tanggal, jamMulai: cfg.jamMulai || "", jamSelesai: cfg.jamSelesai || "", groupName, materi: cfg.materi, tempat: cfg.tempat, pemateri: cfg.pemateri, fotoKegiatan: cfg.fotoKegiatan, logoKiri: cfg.logoKiri, logoKanan: cfg.logoKanan, stats: { total: list.length, present, absent: list.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
      setHistory(prev => [newHist, ...prev]);
 
      if(user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), newHist); }

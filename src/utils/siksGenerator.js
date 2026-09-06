@@ -9,6 +9,8 @@ const KE = { HADIR: 'HADIR', SAKIT: 'SAKIT', ALFA: 'ALFA' };
 
 const normTeks = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
 const hitungKata = (s) => { const t = normTeks(s); return t ? t.split(/\s+/).length : 0; };
+// Validasi & normalisasi jam HH:mm — kosong bila tidak valid (dipakai utk nilai riwayat lama).
+const HHmm = (s) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s == null ? '' : s).trim()) ? String(s).trim() : '');
 
 /** Baris peserta dari satu detail riwayat → kontrak. Status lama (tanpa tri-state)
  *  diturunkan sama seperti laporan: presence true = HADIR, false = ALFA. */
@@ -114,8 +116,8 @@ export function defaultFormExport(h, pendamping) {
     nama: `${normTeks(h.groupName)} — ${normTeks(h.materi) || 'P2K2'}`,
     materiSiks: guessSiksMateri(h.materi),
     tanggal,
-    jamMulai: '09:00',
-    jamSelesai: '11:00',
+    jamMulai: HHmm(h.jamMulai) || '09:00',
+    jamSelesai: HHmm(h.jamSelesai) || '11:00',
     tempat: normTeks(h.tempat),
     pemateriNama: normTeks(pendamping),
     pemateriInstansi: normTeks(h.pemateri) || 'Pendamping Sosial PKH',

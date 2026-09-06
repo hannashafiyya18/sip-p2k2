@@ -4,7 +4,7 @@ import {
   ChevronDown, Grid, Plus, CheckSquare, Archive, Trash2, Settings,
   Camera, Upload, Loader2, Eye, Download, X,
   Users,
-  Calendar, MapPin, BookOpen, User, Image as ImageIcon, ScanLine, Sparkles, CopyX
+  Calendar, Clock, MapPin, BookOpen, User, Image as ImageIcon, ScanLine, Sparkles, CopyX
 } from 'lucide-react';
 import { PKH_MODULES } from '../../utils/constants';
 import { formatRupiah } from '../../utils/helpers';
@@ -186,6 +186,14 @@ export default function InputTab({
                                       <button type="button" onClick={() => handleConfigChange('tanggal', new Date().toISOString().split('T')[0])} className="text-[11px] font-bold text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 hover:underline transition">Hari ini</button>
                                   </div>
                                   <input type="date" value={currentConfig.tanggal} onChange={e=>handleConfigChange('tanggal', e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                              </div>
+                              <div className="space-y-1.5">
+                                  <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><Clock size={13} className="text-orange-500"/> Jam Mulai</label>
+                                  <input type="time" value={currentConfig.jamMulai || ""} onChange={e=>handleConfigChange('jamMulai', e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                              </div>
+                              <div className="space-y-1.5">
+                                  <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><Clock size={13} className="text-orange-500"/> Jam Selesai</label>
+                                  <input type="time" value={currentConfig.jamSelesai || ""} onChange={e=>handleConfigChange('jamSelesai', e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none transition focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
                               </div>
                               <div className="space-y-1.5">
                                   <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400"><MapPin size={13} className="text-orange-500"/> Tempat</label>

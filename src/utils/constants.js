@@ -13,7 +13,7 @@ export const PKH_MODULES = {
 
 export const INITIAL_DATA = [];
 export const UNDERSTANDING_LEVELS = ["-", "Kurang", "Baik", "Sangat Baik", "Tidak Dapat Dinilai"];
-export const DEFAULT_CONFIG = { pendamping: "Muhammad As'adur Rofiq", tanggal: new Date().toISOString().split('T')[0], tempat: "Rumah Ketua Kelompok", materi: 'Modul Stunting Sesi 11 "Pemanfaatan Bantuan Sosial"', pemateri: "Pendamping Sosial PKH", fotoKegiatan: null, logoKiri: null, logoKanan: null, desa: "", kecamatan: "", kabupaten: "", provinsi: "" };
+export const DEFAULT_CONFIG = { pendamping: "Muhammad As'adur Rofiq", tanggal: new Date().toISOString().split('T')[0], tempat: "Rumah Ketua Kelompok", jamMulai: "09:00", jamSelesai: "11:00", materi: 'Modul Stunting Sesi 11 "Pemanfaatan Bantuan Sosial"', pemateri: "Pendamping Sosial PKH", fotoKegiatan: null, logoKiri: null, logoKanan: null, desa: "", kecamatan: "", kabupaten: "", provinsi: "" };
 
 export const STORAGE_KEY_DATA = 'pkh_app_data_v2'; 
 export const STORAGE_KEY_CONFIG = 'pkh_app_config_v1';
