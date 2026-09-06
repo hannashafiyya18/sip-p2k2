@@ -12,7 +12,8 @@ export const guessSiksMateri = (materiLama, fallbackIndex = 0) => {
   let idx = -1;
   if (kata(['pinjam', 'menabung', 'usaha', 'pengelolaan keuangan'])) idx = 1;      // PENGELOLAAN KEUANGAN
   else if (kata(['gizi', 'kesehatan', 'stunting', 'ibu hamil', 'menyusui', 'imunisasi'])) idx = 2; // KESEHATAN DAN GIZI
-  else if (kata(['kesejahteraan sosial', 'disabilitas', 'lansia', 'lanjut usia', 'perlindungan anak', 'kekerasan', 'penelantaran', 'eksploitasi', 'pengasuhan', 'pendidikan anak'])) idx = 3; // KESEJAHTERAAN SOSIAL (layanan sosial)
+  else if (kata(['pengasuhan', 'pendidikan anak', 'pola asuh', 'perkembangan anak'])) idx = 5; // Modul FDS Pendidikan/Pengasuhan Anak tak punya padanan di 6 kategori SIKS -> P2K2 ADAPTIF (keputusan user 2026-09-06)
+  else if (kata(['kesejahteraan sosial', 'disabilitas', 'lansia', 'lanjut usia', 'perlindungan anak', 'kekerasan', 'penelantaran', 'eksploitasi'])) idx = 3; // KESEJAHTERAAN SOSIAL (layanan sosial)
   else if (kata(['adaptif', 'materi tambahan', 'isu'])) idx = 5;                    // P2K2 ADAPTIF
   return idx >= 0 ? SIKS_MATERI[idx] : (SIKS_MATERI[fallbackIndex] || SIKS_MATERI[0]);
 };
