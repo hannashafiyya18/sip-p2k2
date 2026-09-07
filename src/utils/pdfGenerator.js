@@ -259,3 +259,52 @@ export const exportAbsensiPDF = async ({ action, data, selectedGroup, groupConfi
         }
     } catch(e){ console.error(e); showAlert("Error", "Gagal Membuat PDF Absensi"); } finally { setIsGeneratingPDF(false); } 
 };
+/**
+ * PDF PEMANTAUAN per SESI (satu halaman) — format SAMA dgn halaman per sesi pada
+ * cetak laporan bulanan ("Pemantauan KPM PKH Setiap P2K2", kolom kuning/hijau,
+ * baris TOTAL), TANPA foto tertanam (agar pasti < 500 KB sebagai lampiran SIKS).
+ * Dipakai fitur Export Berkas SIKS di modal export -> nama pemantauan-<tgl>-<kelompok>.pdf
+ * Catatan: format cetak laporan bulanan (exportLaporanBulananPDF) TIDAK diubah.
+ */
+export const exportPemantauanSesiPDF = ({ historyItem, form = {}, groupConfigs = {}, currentConfig = {}, filename }) => {
+    const g = (historyItem && historyItem.groupName) || null;
+    const gc = (g && groupConfigs[g]) || {};
+    const pendamping = (historyItem && historyItem.pendamping) || gc.pendamping || currentConfig.pendamping || DEFAULT_CONFIG.pendamping || "-";
+    const tanggal = form.tanggal || (historyItem && historyItem.date) || "-";
+    const tempat = form.tempat || (historyItem && historyItem.tempat) || gc.tempat || currentConfig.tempat || "-";
+    const materi = (historyItem && historyItem.materi) || gc.materi || currentConfig.materi || "-";
+    const pemateri = form.pemateriNama || (historyItem && historyItem.pemateri) || gc.pemateri || currentConfig.pemateri || DEFAULT_CONFIG.pemateri || "-";
+    const groupData = (historyItem && Array.isArray(historyItem.details)) ? historyItem.details : [];
+
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("Pemantauan KPM PKH Setiap P2K2", 14, 20);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal"); let y = 35;
+    const labels = [ ["Nama Pendamping", pendamping], ["Tanggal Pelaksanaan", tanggal], ["Tempat", tempat], ["Materi", materi], ["Pemateri", pemateri] ];
+    labels.forEach(([lbl, val]) => { doc.text(lbl, 14, y); doc.text(":", 50, y); doc.text(String(val || "-"), 53, y); y += 6; });
+
+    const totals = groupData.reduce((acc, curr) => {
+        if (curr.presence) { acc.hadir++; if (curr.understanding === 'Kurang') acc.kurang++; else if (curr.understanding === 'Baik') acc.baik++; else if (curr.understanding === 'Sangat Baik') acc.sangat++; else acc.nullVal++; } else { acc.tidak++; acc.nullVal++; }
+        return acc;
+    }, { hadir: 0, tidak: 0, kurang: 0, baik: 0, sangat: 0, nullVal: 0 });
+    const totalTidakDapatDinilai = totals.tidak + (groupData.filter(d => d.presence && (d.understanding === 'Tidak Dapat Dinilai' || d.understanding === '-')).length);
+
+    const rows = groupData.map((k, i) => {
+        const s = k.presence ? { hadir: true, nilai: k.understanding } : { hadir: false, nilai: '-' };
+        return [ i + 1, k.name, k.group, s.hadir ? "V" : "", !s.hadir ? "V" : "", s.hadir && s.nilai === "Kurang" ? "V" : "", s.hadir && s.nilai === "Baik" ? "V" : "", s.hadir && s.nilai === "Sangat Baik" ? "V" : "", (!s.hadir || s.nilai === "Tidak Dapat Dinilai" || s.nilai === "-") ? "V" : "" ];
+    });
+
+    doc.autoTable({
+        startY: y + 5,
+        head: [ [ { content: 'No', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: 'Nama KPM', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: 'Kelompok', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: 'Kehadiran P2K2', colSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: 'Pengetahuan & Pemahaman', colSpan: 4, styles: { halign: 'center', valign: 'middle' } } ], ['Hadir', 'Tidak Hadir', 'Kurang', 'Baik', 'Sangat Baik', 'Tidak Dapat Dinilai'] ],
+        body: rows, foot: [[ { content: 'TOTAL', colSpan: 3, styles: { halign: 'center', fontStyle: 'bold' } }, totals.hadir, totals.tidak, totals.kurang, totals.baik, totals.sangat, totalTidakDapatDinilai ]],
+        theme: 'grid', styles: { fontSize: 8, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0] },
+        didParseCell: (data) => { if (data.section === 'head' || data.section === 'body') { if (data.column.index === 3 || data.column.index === 4) data.cell.styles.fillColor = [255, 230, 153]; if (data.column.index >= 5 && data.column.index <= 8) data.cell.styles.fillColor = [226, 239, 218]; } },
+        headStyles: { textColor: [0, 0, 0], lineWidth: 0.1, fontStyle: 'bold', fillColor: false }, footStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], lineWidth: 0.1, fontStyle: 'bold' }
+    });
+
+    if (!filename) {
+        const slug = String(g || 'kelompok').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'kelompok';
+        filename = 'pemantauan-' + String(tanggal).slice(0, 10) + '-' + slug + '.pdf';
+    }
+    doc.save(filename);
+};

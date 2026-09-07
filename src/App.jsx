@@ -14,7 +14,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } fro
 // --- IMPORT CONSTANTS, HELPERS, & PDF ---
 import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN, ATTENDANCE_HADIR, ATTENDANCE_SAKIT, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, ATTENDANCE_LABELS, SIKS_MATERI } from './utils/constants';
 import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding, findDuplicateKpm, workingStatus, archivedStatus, withAttendance, countAttendance, isAttendanceStatus } from './utils/helpers';
-import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF } from './utils/pdfGenerator';
+import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF, exportPemantauanSesiPDF } from './utils/pdfGenerator';
 import { buildRekapKecamatan, rekapRowValues, downloadRekapXLSX } from './utils/rekapGenerator';
 
 // --- IMPORT KOMPONEN UI ---
@@ -27,7 +27,7 @@ import GraduasiTab from './components/tabs/GraduasiTab';
 import ChatBot from './components/layout/ChatBot';
 
 import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
-import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, bacaIdsSukses } from './utils/siksGenerator';
+import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses } from './utils/siksGenerator';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -685,9 +685,23 @@ export default function App() {
     const res = buildExportKegiatan(exportSiks, exportSiksForm);
     if (res.masalah.length) { showAlert("Export Belum Bisa", res.masalah.join("\n")); return; }
     const fname = namaFileExport(exportSiks, exportSiksForm.tanggal);
+    const fotoName = fname.replace(/^export-siks-/, "foto-").replace(/\.json$/, ".jpg");
+    const pdfName = fname.replace(/^export-siks-/, "pemantauan-").replace(/\.json$/, ".pdf");
+    // Bot p2k2-siks-bot: nama file POLOS dicari di folder export JSON lalu Downloads
+    // (resolveBerkas) — path absolut tidak perlu diedit manual lagi.
+    res.json.dokumen.fotoKegiatan = fotoName;
+    res.json.dokumen.dokumenPendukung = pdfName;
     unduhJson(fname, res.json);
+    if (exportSiks.fotoKegiatan) unduhDataUrl(fotoName, exportSiks.fotoKegiatan);
+    try {
+      exportPemantauanSesiPDF({ historyItem: exportSiks, form: exportSiksForm, groupConfigs, currentConfig, filename: pdfName });
+    } catch (e) {
+      console.error("PDF pemantauan gagal", e);
+      showAlert("PDF Gagal", "JSON & foto tetap terunduh, tapi PDF pemantauan gagal: " + e.message);
+    }
     closeExportSiks();
-    showToast(`File ${fname} diunduh — siap diinput bot (${res.pesertaCount} peserta)`);
+    const adaFoto = exportSiks.fotoKegiatan ? " + foto" : " (tanpa foto — sesi ini tidak punya foto)";
+    showToast("Berkas SIKS diunduh: JSON" + adaFoto + " + PDF pemantauan — siap diinput bot dari folder yang sama");
   };
 
   // Baca status-sudah-*.json / hasil-*.json dari p2k2-siks-bot → tandai sesi "Sudah SIKS"
@@ -1359,7 +1373,7 @@ export default function App() {
             </div>
 
             <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 px-3.5 py-2.5 text-[11px] leading-relaxed text-blue-700 dark:text-blue-300">
-              📷 <b>Foto & dokumen pendukung tidak ikut di file ini</b> — foto kegiatan wajib geotag ≤500 KB diambil manual. Bila perlu, buka file JSON yang terunduh lalu isi <code className="bg-white/60 dark:bg-gray-900/60 px-1 rounded">dokumen.fotoKegiatan</code> dengan path file lokal sebelum dijalankan bot.
+              ⬇️ Export menghasilkan 3 berkas di folder unduhan: <b>JSON</b> (data kegiatan + presensi), <b>foto kegiatan</b>{exportSiks.fotoKegiatan ? "" : " (sesi ini belum punya foto — dilewati)"}, dan <b>PDF pemantauan</b> (format centang). Bot otomatis menemukan foto & PDF lewat nama file di dalam JSON — simpan ketiganya di <b>folder yang sama</b>.
             </div>
 
             {exs.peringatan.length > 0 && (
@@ -1373,7 +1387,7 @@ export default function App() {
           <div className="flex gap-3 mt-6">
             <button onClick={closeExportSiks} className="flex-1 py-3.5 rounded-xl font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm">Batal</button>
             <button onClick={doExportSiks} disabled={exs.masalah.length > 0} className="flex-[2] py-3.5 rounded-xl font-bold bg-blue-600 text-white shadow-lg shadow-blue-600/25 hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <Download size={16}/> Unduh File Export (.json)
+              <Download size={16}/> Unduh Berkas SIKS ({exportSiks.fotoKegiatan ? 3 : 2} file)
             </button>
           </div>
         </div>

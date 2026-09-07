@@ -140,6 +140,19 @@ export function unduhJson(filename, obj) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/** Unduh berkas dari dataURL (mis. foto kegiatan base64) sebagai file nyata.
+ *  Dipakai fitur Export Berkas SIKS: foto disimpan dengan nama
+ *  foto-<tanggal>-<kelompok>.jpg — bot p2k2-siks-bot mencarinya lewat nama polos. */
+export function unduhDataUrl(filename, dataUrl) {
+  if (!dataUrl) return;
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 /** Ambil daftar kegiatan.id yang sukses dari file hasil bot (dua format diterima). */
 export function bacaIdsSukses(data) {
   if (!data || typeof data !== 'object') return [];
