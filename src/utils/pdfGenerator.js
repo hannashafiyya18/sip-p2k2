@@ -4,6 +4,22 @@ import 'jspdf-autotable';
 import { getImageDimensions } from './helpers';
 import { DEFAULT_CONFIG } from './constants';
 
+/**
+ * Cetak satu baris meta "label: nilai" di header dokumen dengan wrap otomatis.
+ * Nilai panjang (mis. judul materi P2K2 yang memanjang) dipecah per kata agar
+ * TIDAK keluar batas halaman (sebelumnya: doc.text polos -> teks terpotong di
+ * tepi kertas). Mengembalikan posisi y berikutnya (ikut bertambah bila wrap).
+ */
+const drawMetaLine = (doc, y, { label = null, value = "-", labelX = 14, colonX = 50, valueX = 53, lineH = 6, rightMargin = 14 } = {}) => {
+    if (label) doc.text(label, labelX, y);
+    if (colonX) doc.text(":", colonX, y);
+    const pageW = doc.internal.pageSize.getWidth();
+    const maxW = Math.max(20, pageW - rightMargin - valueX);
+    const lines = doc.splitTextToSize(String(value || "-"), maxW);
+    lines.forEach((ln, i) => doc.text(ln, valueX, y + i * lineH));
+    return y + lines.length * lineH;
+};
+
 export const exportGraduationLetter = async ({ kpm, currentConfig, setIsGeneratingPDF, showAlert, showToast }) => {
     setIsGeneratingPDF(true);
     try {
@@ -19,7 +35,7 @@ export const exportGraduationLetter = async ({ kpm, currentConfig, setIsGenerati
 
         let y = 75;
         const labels = [ ["Nama", safeName], ["NIK", safeNik], ["Alamat", safeAddress], ["Desa/Kelurahan", safeDesa], ["Kecamatan", safeKec], ["Kabupaten/Kota", safeKab], ["Provinsi", safeProv] ];
-        labels.forEach(([label, value]) => { doc.text(label, 25, y); doc.text(":", 60, y); doc.text(value, 63, y); y += 6; });
+        labels.forEach(([label, value]) => { y = drawMetaLine(doc, y, { label, value, labelX: 25, colonX: 60, valueX: 63 }); });
 
         y += 4; 
         const bodyText = "Dengan ini menyatakan bahwa saya bersedia untuk Graduasi Mandiri dari kepesertaan Program Keluarga Harapan (PKH)/Bantuan Sosial karena:";
@@ -78,9 +94,13 @@ export const exportSemesterPDF = async ({ action, history, data, semesterYear, s
             const safePendamping = session.pendamping || groupConfigs[currentGroupName]?.pendamping || currentConfig.pendamping || DEFAULT_CONFIG.pendamping;
             const safeMateri = session.materi || groupConfigs[currentGroupName]?.materi || currentConfig.materi || "-";
 
-            doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text("NAMA PENDAMPING", 14, 25); doc.setFont("helvetica", "normal"); doc.text(`: ${safePendamping}`, 60, 25);
-            doc.setFont("helvetica", "bold"); doc.text("Periode Pemantauan", 14, 30); doc.setFont("helvetica", "normal"); doc.text(`: ${monthName}`, 60, 30);
-            doc.setFont("helvetica", "bold"); doc.text("Materi/Sesi", 14, 35); doc.setFont("helvetica", "normal"); doc.text(`: ${safeMateri}`, 60, 35);
+            doc.setFontSize(10);
+            let metaY = 25;
+            [["NAMA PENDAMPING", `: ${safePendamping}`], ["Periode Pemantauan", `: ${monthName}`], ["Materi/Sesi", `: ${safeMateri}`]].forEach(([lbl, val]) => {
+                doc.setFont("helvetica", "bold"); doc.text(lbl, 14, metaY);
+                doc.setFont("helvetica", "normal");
+                metaY = drawMetaLine(doc, metaY, { value: val, colonX: null, valueX: 60, lineH: 5 });
+            });
 
             let sourceData = [];
             if (session.details && (Array.isArray(session.details) || typeof session.details === 'object')) {
@@ -100,7 +120,7 @@ export const exportSemesterPDF = async ({ action, history, data, semesterYear, s
             rows.push([ { content: 'TOTAL', colSpan: 3, styles: { halign: 'center', fontStyle: 'bold', fillColor: [220, 220, 220] } }, { content: totals.k, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.b, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.sb, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.na, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.k, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.b, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.sb, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }, { content: totals.na, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } } ]);
 
             doc.autoTable({
-                startY: 45,
+                startY: metaY + 5,
                 head: [ [ { content: 'No', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: 'Nama KPM', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: 'Kelompok', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: 'Perubahan Perilaku', colSpan: 4, styles: { halign: 'center', valign: 'middle', fillColor: [200, 230, 200] } }, { content: 'Kemampuan Mengenali Potensi', colSpan: 4, styles: { halign: 'center', valign: 'middle', fillColor: [200, 220, 255] } } ], [ 'kurang', 'baik', 'sangat baik', 'tidak dapat dinilai', 'kurang', 'baik', 'sangat baik', 'tidak dapat dinilai' ] ],
                 body: rows, theme: 'grid', styles: { fontSize: 9, cellPadding: 1.5, lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0] }, headStyles: { textColor: [0, 0, 0], lineWidth: 0.1, fontStyle: 'bold', fillColor: [240, 240, 240] },
                 columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 50 }, 2: { cellWidth: 30 }, 3: { halign: 'center' }, 4: { halign: 'center' }, 5: { halign: 'center' }, 6: { halign: 'center' }, 7: { halign: 'center' }, 8: { halign: 'center' }, 9: { halign: 'center' }, 10: { halign: 'center' } }
@@ -148,7 +168,7 @@ export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bu
             const safeMateri = historyItem.materi || groupConfigs[currentGroupName]?.materi || currentConfig.materi || "-";
 
             const labels = [ ["Nama Pendamping", safePendamping], ["Tanggal Pelaksanaan", historyItem.date], ["Tempat", safeTempat], ["Materi", safeMateri], ["Pemateri", safePemateri] ];
-            labels.forEach(([lbl, val]) => { doc.text(lbl, 14, y); doc.text(":", 50, y); doc.text(val || "-", 53, y); y += 6; });
+            labels.forEach(([lbl, val]) => { y = drawMetaLine(doc, y, { label: lbl, value: val }); });
 
             const totals = groupData.reduce((acc, curr) => {
                 if (curr.presence) { acc.hadir++; if (curr.understanding === 'Kurang') acc.kurang++; else if (curr.understanding === 'Baik') acc.baik++; else if (curr.understanding === 'Sangat Baik') acc.sangat++; else acc.nullVal++; } else { acc.tidak++; acc.nullVal++; }
@@ -232,7 +252,7 @@ export const exportAbsensiPDF = async ({ action, data, selectedGroup, groupConfi
 
             let headerY = 30;
             headerLabels.forEach(([label, value]) => {
-                doc.text(label, 14, headerY); doc.text(":", 50, headerY); doc.text(value, 53, headerY); headerY += 5;
+                headerY = drawMetaLine(doc, headerY, { label, value, lineH: 5 });
             });
 
             const rows = groupData.map((k, i) => {
@@ -241,7 +261,7 @@ export const exportAbsensiPDF = async ({ action, data, selectedGroup, groupConfi
             });
 
             doc.autoTable({
-                startY: 50, 
+                startY: headerY, 
                 head: [['NO', 'PENGURUS', 'NO KK', 'NIK', 'ALAMAT', 'AUD', 'SD', 'SMP', 'SMA', 'DISAB', 'LANSIA', 'HAMIL', 'KETERANGAN', 'TTD']],
                 body: rows,
                 theme: 'grid',
@@ -280,7 +300,7 @@ export const exportPemantauanSesiPDF = ({ historyItem, form = {}, groupConfigs =
     doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("Pemantauan KPM PKH Setiap P2K2", 14, 20);
     doc.setFontSize(10); doc.setFont("helvetica", "normal"); let y = 35;
     const labels = [ ["Nama Pendamping", pendamping], ["Tanggal Pelaksanaan", tanggal], ["Tempat", tempat], ["Materi", materi], ["Pemateri", pemateri] ];
-    labels.forEach(([lbl, val]) => { doc.text(lbl, 14, y); doc.text(":", 50, y); doc.text(String(val || "-"), 53, y); y += 6; });
+    labels.forEach(([lbl, val]) => { y = drawMetaLine(doc, y, { label: lbl, value: val }); });
 
     const totals = groupData.reduce((acc, curr) => {
         if (curr.presence) { acc.hadir++; if (curr.understanding === 'Kurang') acc.kurang++; else if (curr.understanding === 'Baik') acc.baik++; else if (curr.understanding === 'Sangat Baik') acc.sangat++; else acc.nullVal++; } else { acc.tidak++; acc.nullVal++; }
