@@ -30,6 +30,9 @@ export default function InputTab({
 }) {
   const listRef = useReveal({ deps: [selectedGroup], stagger: 0.04, y: 14, max: 12 });
   const [identityOpen, setIdentityOpen] = React.useState(false);
+  // Panel kehadiran (Hadir/Sakit/Alfa) kartu KPM: hanya SATU kartu terbuka pada
+  // satu waktu, supaya daftar tetap rapi walau KPM-nya banyak.
+  const [attendMenuId, setAttendMenuId] = React.useState(null);
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
       
@@ -320,7 +323,9 @@ export default function InputTab({
                 key={item.id}
                 item={item}
                 isExpanded={expandedId === item.id}
+                isAttendOpen={attendMenuId === item.id}
                 onAttendanceChange={(s) => handleAttendanceChange(item, s)}
+                onToggleAttendMenu={(open) => setAttendMenuId(open ? item.id : null)}
                 onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
                 onOpenNote={() => openNoteModal(item.id, item.name, item.note)}
                 onEdit={() => openEditModal(item)}
