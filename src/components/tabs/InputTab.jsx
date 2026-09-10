@@ -1,8 +1,8 @@
 import React from 'react';
-import { 
+import {
   CheckCircle, XCircle, Wallet, Banknote, PieChart, Activity, Search,
   ChevronDown, Grid, Plus, CheckSquare, Archive, Trash2, Settings,
-  Camera, Upload, Loader2, Eye, Download, X,
+  Camera, Upload, Loader2, Eye, Download, X, Check, Thermometer,
   Users,
   Calendar, Clock, MapPin, BookOpen, User, Image as ImageIcon, ScanLine, Sparkles, CopyX
 } from 'lucide-react';
@@ -33,6 +33,10 @@ export default function InputTab({
   // Panel kehadiran (Hadir/Sakit/Alfa) kartu KPM: hanya SATU kartu terbuka pada
   // satu waktu, supaya daftar tetap rapi walau KPM-nya banyak.
   const [attendMenuId, setAttendMenuId] = React.useState(null);
+  // Kemajuan penandaan kehadiran sesi ini — dipakai bilah "X/Y ditandai".
+  const att = stats?.attendance || { hadir: 0, sakit: 0, alfa: 0, belum: 0 };
+  const ditandai = att.hadir + att.sakit + att.alfa;
+  const pctDitandai = stats?.total > 0 ? Math.round((ditandai / stats.total) * 100) : 0;
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
       
@@ -98,8 +102,18 @@ export default function InputTab({
       <div className={`flex flex-col md:flex-row gap-3 sticky top-[70px] pt-2 ${showToolsMenu ? 'z-[70]' : 'z-30'}`}>
          <div className={`w-full md:flex-1 flex flex-col gap-2`}>
             <div className={`flex items-center px-4 py-3 rounded-xl shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 ${cardColor}`}>
-                <Search className="text-gray-400 mr-3" size={18} />
-                <input type="text" placeholder="Cari nama KPM atau NIK..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-transparent border-none outline-none w-full text-sm font-medium dark:text-white placeholder-gray-400" />
+                <Search className="text-gray-400 mr-3 shrink-0" size={18} />
+                <input type="search" inputMode="search" aria-label="Cari nama KPM atau NIK" placeholder="Cari nama KPM atau NIK..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-transparent border-none outline-none w-full text-sm font-medium dark:text-white placeholder-gray-400" />
+                {searchTerm ? (
+                    <>
+                        <span className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full tabular-nums ${subText}`}>{filteredData.length} hasil</span>
+                        <button type="button" onClick={() => setSearchTerm('')} aria-label="Hapus pencarian" title="Hapus pencarian" className="shrink-0 ml-1.5 p-1.5 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition active:scale-90">
+                            <X size={15} />
+                        </button>
+                    </>
+                ) : (
+                    <span className={`shrink-0 text-[11px] font-bold tabular-nums ${subText}`}>{filteredData.length} KPM</span>
+                )}
             </div>
 
          </div>
@@ -296,14 +310,21 @@ export default function InputTab({
                 <div className="min-w-0">
                     <p className={`text-[10px] font-bold uppercase tracking-wider ${subText}`}>Absensi {selectedGroup === 'Semua Kelompok' ? '· semua kelompok' : `· ${selectedGroup}`}</p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900 tabular-nums">{stats.attendance.hadir} Hadir</span>
-                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900 tabular-nums">{stats.attendance.sakit} Sakit</span>
-                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900 tabular-nums">{stats.attendance.alfa} Alfa</span>
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900 tabular-nums inline-flex items-center gap-1"><Check strokeWidth={3} size={11}/> {stats.attendance.hadir} Hadir</span>
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900 tabular-nums inline-flex items-center gap-1"><Thermometer size={11}/> {stats.attendance.sakit} Sakit</span>
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900 tabular-nums inline-flex items-center gap-1"><X size={11}/> {stats.attendance.alfa} Alfa</span>
                         {stats.attendance.belum > 0 ? (
                             <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 tabular-nums">{stats.attendance.belum} belum ditandai</span>
                         ) : (
                             <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900 inline-flex items-center gap-1"><CheckCircle size={11}/> Lengkap</span>
                         )}
+                    </div>
+                    {/* Bilah kemajuan: seberapa jauh sesi ini sudah ditandai. */}
+                    <div className="mt-2 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden" role="progressbar" aria-valuenow={pctDitandai} aria-valuemin={0} aria-valuemax={100} aria-label="Kemajuan penandaan kehadiran">
+                            <div className={`h-full rounded-full transition-all duration-500 ${pctDitandai === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${pctDitandai}%` }} />
+                        </div>
+                        <span className={`text-[10px] font-bold tabular-nums shrink-0 ${subText}`}>{ditandai}/{stats.total} ditandai</span>
                     </div>
                 </div>
                 <button
