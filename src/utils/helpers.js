@@ -1,4 +1,4 @@
-import { AID_VALUES, ATTENDANCE_HADIR, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, SIKS_MATERI } from './constants';
+import { AID_VALUES, ATTENDANCE_HADIR, ATTENDANCE_SAKIT, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, SIKS_MATERI } from './constants';
 
 /**
  * Tebak kategori Materi SIKS dari materi/modul sip-p2k2 (dipakai sebagai default
@@ -178,6 +178,22 @@ export const countAttendance = (list = []) => {
     else if (s === 'SAKIT') c.sakit++;
     else if (s === 'ALFA') c.alfa++;
     else c.belum++;
+  }
+  return c;
+};
+
+/**
+ * Cacah tri-state untuk baris sesi yang SUDAH diarsipkan ke Riwayat.
+ * Memakai archivedStatus() supaya sesi lama (tanpa `status`) tetap terhitung —
+ * di sana tidak hadir = Alfa (perkiraan), sama seperti yang ditampilkan di UI.
+ */
+export const countArchivedAttendance = (details = []) => {
+  const c = { total: details.length, hadir: 0, sakit: 0, alfa: 0 };
+  for (const d of details) {
+    const s = archivedStatus(d);
+    if (s === ATTENDANCE_HADIR) c.hadir++;
+    else if (s === ATTENDANCE_SAKIT) c.sakit++;
+    else c.alfa++;
   }
   return c;
 };
