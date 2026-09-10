@@ -213,13 +213,18 @@ export default function App() {
     // dan dari sanalah PDF/tampilan mengambilnya. Foto base64 sangat besar dan cepat
     // menembus kuota localStorage (~5MB), jadi TIDAK pernah disimpan ke sini — inilah yang
     // membuat notice "penyimpanan penuh" muncul berulang meski data KPM sudah dirapikan.
-    const slim = JSON.stringify(stripHeavyHistoryFields(history));
-    if (safeSetItem(STORAGE_KEY_HISTORY, slim)) return;
-    // Versi ringan pun gagal = perangkat benar-benar penuh (jarang). Data tetap aman di akun.
-    if (!quotaWarnedRef.current) {
-      quotaWarnedRef.current = true;
-      showToast("Penyimpanan perangkat hampir penuh. Data Anda tetap aman di akun — hanya cadangan offline yang tak tersimpan.", 'warning');
-    }
+    // Ditunda 800 ms: JSON.stringify seluruh riwayat itu sinkron dan berat, jadi tidak
+    // perlu dijalankan setiap ketukan — cukup sekali setelah perubahan berhenti.
+    const timer = setTimeout(() => {
+      const slim = JSON.stringify(stripHeavyHistoryFields(history));
+      if (safeSetItem(STORAGE_KEY_HISTORY, slim)) return;
+      // Versi ringan pun gagal = perangkat benar-benar penuh (jarang). Data tetap aman di akun.
+      if (!quotaWarnedRef.current) {
+        quotaWarnedRef.current = true;
+        showToast("Penyimpanan perangkat hampir penuh. Data Anda tetap aman di akun — hanya cadangan offline yang tak tersimpan.", 'warning');
+      }
+    }, 800);
+    return () => clearTimeout(timer);
   }, [history]);
   useEffect(() => { safeSetItem(STORAGE_KEY_VIEW_SETTINGS, JSON.stringify(viewSettings)); if (viewSettings.theme === 'dark') document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [viewSettings]);
   useEffect(() => { safeSetItem(STORAGE_KEY_AUTO_ASSESS, String(autoAssess)); }, [autoAssess]);
@@ -665,13 +670,44 @@ export default function App() {
 
   const handleDeleteHistory = async (id) => { showConfirm("Hapus Riwayat", "Data ini akan dihapus permanen. Lanjutkan?", async () => {
     try {
-      if (user && db) { await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(id))); }
+      if (user && db) {
+        await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(id)));
+        // Foto sesi gaya baru tinggal di koleksi terpisah — jangan tinggalkan sampah.
+        try { await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history_media`, String(id))); } catch { /* sesi lama: memang tidak punya dokumen foto */ }
+      }
+      lupakanFotoSesi(id);
       setHistory(prev => prev.filter(h => h.id !== id)); closeModal(); showToast("Riwayat dihapus");
     } catch (e) {
       console.error("Hapus riwayat gagal", e);
       showToast("Gagal menghapus — periksa koneksi.", 'warning');
     }
   }); };
+
+  // Hapus beberapa sesi sekaligus (mode "Pilih" di tab Riwayat). Konfirmasi di sini supaya
+  // teksnya ikut jumlah terakhir; dokumen foto ikut dibersihkan.
+  const handleDeleteManyHistory = (ids) => {
+    const daftar = [...new Set((ids || []).map(String))];
+    if (!daftar.length) return;
+    showConfirm("Hapus Sesi Terpilih?", `${daftar.length} sesi akan dihapus permanen, termasuk fotonya. Lanjutkan?`, async () => {
+      const set = new Set(daftar);
+      daftar.forEach(lupakanFotoSesi);
+      setHistory(prev => prev.filter(h => !set.has(String(h.id))));
+      if (user && db) {
+        try {
+          const batch = writeBatch(db);
+          daftar.forEach(id => {
+            batch.delete(doc(db, `artifacts/${appId}/users/${user.uid}/history`, id));
+            batch.delete(doc(db, `artifacts/${appId}/users/${user.uid}/history_media`, id));
+          });
+          await batch.commit();
+          showToast(`${daftar.length} sesi dihapus`);
+        } catch (e) {
+          console.error("Hapus massal gagal", e);
+          showAlert("Sebagian Gagal", "Beberapa sesi mungkin belum terhapus dari akun. Muat ulang lalu coba lagi.");
+        }
+      } else { showToast(`${daftar.length} sesi dihapus (lokal)`); }
+    }, 'warning');
+  };
 
   // --- EXPORT SIKS-NG & IMPOR HASIL BOT (p2k2-siks-bot) ---
   const openExportSiks = async (h) => {
@@ -1609,6 +1645,7 @@ export default function App() {
               historyFilterMonth={historyFilterMonth} setHistoryFilterMonth={setHistoryFilterMonth} textColor={textColor} cardColor={cardColor}
               handleEditHistory={handleEditHistory} handleDeleteHistory={handleDeleteHistory}
               onExportSiks={openExportSiks} onImportSiksResult={handleImportSiksResult} loadPhoto={muatFoto}
+              onDeleteMany={handleDeleteManyHistory}
               isRekapOpen={isRekapOpen} setIsRekapOpen={setIsRekapOpen} rekapMonth={rekapMonth} rekapYear={rekapYear}
               setRekapYear={setRekapYear} setShowRekapMonthModal={setShowRekapMonthModal} handleBuildRekap={handleBuildRekap}
               historyCoverage={historyCoverage} handleInputKelompok={handleInputKelompok}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff, ClipboardList, CheckCircle, AlertTriangle, Plus, Send, Upload, Search, X, Check, Thermometer } from 'lucide-react';
+import { FileText, ChevronDown, ChevronRight, Loader2, Eye, Download, FileBadge, Filter, History, Trash2, Archive, FileSpreadsheet, Calculator, CalendarDays, Camera, ImageOff, ClipboardList, CheckCircle, AlertTriangle, Plus, Send, Upload, Search, X, Check, Thermometer, ArrowUpDown, CheckSquare, Square } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import { useReveal } from '../../hooks/useReveal';
 import { avatarColorFor } from '../../utils/avatar';
@@ -12,6 +12,8 @@ const formatTanggal = (iso) => {
   const d = new Date(iso);
   return isNaN(d) ? iso : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 };
+// Dipakai pengurutan "Kehadiran terendah" — sesi paling perlu ditindaklanjuti naik ke atas.
+const pctHadir = (h) => { const t = h?.stats?.total || 0; return t ? (h.stats.present / t) * 100 : 0; };
 
 // Jumlah kartu sesi per tahap. Sisa daftar dimuat otomatis saat digulir ke bawah,
 // supaya riwayat bertahun-tahun tidak dirender sekaligus (tetap ringan di HP).
@@ -65,19 +67,28 @@ export default function HistoryTab({
   historyFilterMonth, setHistoryFilterMonth, textColor, cardColor,
   handleEditHistory, handleDeleteHistory, onExportSiks, onImportSiksResult,
   isRekapOpen, setIsRekapOpen, rekapMonth, rekapYear, setRekapYear, setShowRekapMonthModal, handleBuildRekap,
-  historyCoverage, handleInputKelompok, loadPhoto
+  historyCoverage, handleInputKelompok, loadPhoto, onDeleteMany
 }) {
   const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
   const importSiksRef = useRef(null);
   const loadMoreRef = useRef(null);
   const [showSudah, setShowSudah] = useState(false);
   const [historySearch, setHistorySearch] = useState('');
+  const [historySort, setHistorySort] = useState('terbaru');
+  // Mode "Pilih": banyak sesi sekaligus untuk dihapus (satu-satu = terlalu banyak konfirmasi).
+  const [pilihMode, setPilihMode] = useState(false);
+  const [terpilih, setTerpilih] = useState(() => new Set());
+  const togglePilih = (id) => setTerpilih(prev => { const next = new Set(prev); const k = String(id); if (next.has(k)) next.delete(k); else next.add(k); return next; });
+
+  // Tahun kosong/typo bikin filter tidak cocok sama sekali. Dulu hasilnya "Belum Ada Riwayat"
+  // (terkesan data hilang) — sekarang dibedakan dan kolomnya ditandai merah.
+  const tahunValid = /^\d{4}$/.test(String(historyFilterYear ?? '').trim());
 
   // --- Pencarian + pemuatan bertahap ---
   const searchTerm = historySearch.trim().toLowerCase();
-  // Kunci daftar: berubah saat filter/pencarian berubah → jumlah tampil otomatis
+  // Kunci daftar: berubah saat filter/pencarian/urutan berubah → jumlah tampil otomatis
   // kembali ke PAGE_SIZE tanpa useEffect (menghindari setState-di-dalam-effect).
-  const listKey = `${historyFilterGroup}|${historyFilterYear}|${historyFilterMonth}|${searchTerm}`;
+  const listKey = `${historyFilterGroup}|${historyFilterYear}|${historyFilterMonth}|${searchTerm}|${historySort}`;
   const [pageState, setPageState] = useState({ key: '', n: PAGE_SIZE });
   const shownCount = pageState.key === listKey ? pageState.n : PAGE_SIZE;
   const muatLagi = useCallback(() => setPageState(prev => ({ key: listKey, n: (prev.key === listKey ? prev.n : PAGE_SIZE) + PAGE_SIZE })), [listKey]);
@@ -94,7 +105,15 @@ export default function HistoryTab({
     });
   }, [filteredHistory, searchTerm]);
 
-  const shownHistory = useMemo(() => searchedHistory.slice(0, shownCount), [searchedHistory, shownCount]);
+  const urutHistory = useMemo(() => {
+    const arr = [...searchedHistory];
+    if (historySort === 'terlama') return arr.sort((a, b) => (a.id || 0) - (b.id || 0));
+    if (historySort === 'kelompok') return arr.sort((a, b) => String(a.groupName || '').localeCompare(String(b.groupName || ''), 'id') || String(b.date || '').localeCompare(String(a.date || '')));
+    if (historySort === 'hadir-terendah') return arr.sort((a, b) => pctHadir(a) - pctHadir(b));
+    return arr.sort((a, b) => (b.id || 0) - (a.id || 0));   // default: terbaru dulu
+  }, [searchedHistory, historySort]);
+
+  const shownHistory = useMemo(() => urutHistory.slice(0, shownCount), [urutHistory, shownCount]);
 
   useEffect(() => {
     const io = new IntersectionObserver((entries) => { if (entries.some(e => e.isIntersecting)) muatLagi(); }, { threshold: 0.1 });
@@ -195,7 +214,7 @@ export default function HistoryTab({
             </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 sticky top-[74px] z-30 mb-4 flex flex-col gap-3">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 sticky top-[70px] z-30 mb-4 flex flex-col gap-3">
             <input ref={importSiksRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { if (e.target.files && e.target.files[0]) onImportSiksResult(e.target.files[0]); e.target.value = ""; }} />
             <div className="flex items-center justify-between gap-2">
                  <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-sm"><Filter size={16} className="text-blue-600"/> Filter Sesi</h3>
@@ -222,7 +241,7 @@ export default function HistoryTab({
                     <ChevronDown size={14} className="shrink-0 text-gray-400 ml-2"/>
                 </button>
                 <div className="w-24 shrink-0 relative">
-                    <input type="number" value={historyFilterYear} onChange={(e) => setHistoryFilterYear(e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-blue-500 text-center" placeholder="Tahun"/>
+                    <input type="number" value={historyFilterYear} onChange={(e) => setHistoryFilterYear(e.target.value)} aria-invalid={!tahunValid} title={tahunValid ? "Tahun filter" : "Isi tahun dengan 4 angka, contoh 2026"} className={`w-full py-2.5 px-3 bg-gray-50 dark:bg-gray-800 border rounded-xl text-xs font-bold outline-none focus:ring-2 text-center ${tahunValid ? 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 focus:ring-blue-500' : 'border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 focus:ring-red-400'}`} placeholder="Tahun"/>
                 </div>
             </div>
 
@@ -233,6 +252,22 @@ export default function HistoryTab({
                         {m}
                     </button>
                 ))}
+            </div>
+
+            {/* Urutan tampilan + mode pilih (untuk hapus beberapa sesi sekaligus) */}
+            <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0 py-2.5 px-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl">
+                    <ArrowUpDown size={14} className="text-gray-400 shrink-0"/>
+                    <select value={historySort} onChange={(e) => setHistorySort(e.target.value)} aria-label="Urutkan sesi riwayat" className="flex-1 min-w-0 bg-transparent border-none outline-none text-xs font-bold text-gray-700 dark:text-gray-200">
+                        <option value="terbaru">Terbaru dulu</option>
+                        <option value="terlama">Terlama dulu</option>
+                        <option value="kelompok">Nama kelompok (A-Z)</option>
+                        <option value="hadir-terendah">Kehadiran terendah (perlu tindak lanjut)</option>
+                    </select>
+                </div>
+                <button type="button" onClick={() => { setPilihMode(v => !v); setTerpilih(new Set()); }} title={pilihMode ? 'Selesai memilih' : 'Pilih beberapa sesi untuk dihapus sekaligus'} aria-pressed={pilihMode} className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border transition active:scale-[0.97] ${pilihMode ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                    {pilihMode ? <CheckSquare size={13}/> : <Square size={13}/>} {pilihMode ? 'Selesai' : 'Pilih'}
+                </button>
             </div>
         </div>
 
@@ -329,7 +364,13 @@ export default function HistoryTab({
             </div>
         )}
 
-        {filteredHistory.length === 0 ? (
+        {!tahunValid ? (
+            <EmptyState
+                title="Tahun Belum Valid"
+                description={`Isi kolom Tahun dengan 4 angka (contoh 2026) supaya daftar sesi bisa disaring.\nSaat ini: "${String(historyFilterYear ?? '').trim() || 'kosong'}"`}
+                icons={[CalendarDays, Filter, History]}
+            />
+        ) : filteredHistory.length === 0 ? (
             <EmptyState
                 title="Belum Ada Riwayat"
                 description={"Tidak ada sesi pertemuan pada filter ini.\nCoba ganti tahun/bulan/kelompok, atau arsipkan sesi\ndari tab Input (menu Tools > Selesai & Reset)."}
@@ -345,11 +386,12 @@ export default function HistoryTab({
         <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {shownHistory.map(h => {
                 const pct = h.stats.total ? Math.round((h.stats.present / h.stats.total) * 100) : 0;
+                const dipilih = terpilih.has(String(h.id));
                 // Rincian tri-state dari baris yang diarsipkan (details[].status).
                 const att = countArchivedAttendance(h.details);
                 const legacy = Array.isArray(h.details) && h.details.length > 0 && h.details.some(isLegacyAttendance);
                 return (
-                <div key={h.id} role="button" tabIndex={0} onClick={() => handleEditHistory(h)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditHistory(h); } }} className={`group p-5 rounded-2xl ${cardColor} shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-900 flex flex-col gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}>
+                <div key={h.id} role={pilihMode ? 'checkbox' : 'button'} aria-checked={pilihMode ? dipilih : undefined} tabIndex={0} onClick={() => (pilihMode ? togglePilih(h.id) : handleEditHistory(h))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (pilihMode) togglePilih(h.id); else handleEditHistory(h); } }} className={`group p-5 rounded-2xl ${cardColor} shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-900 flex flex-col gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${dipilih ? 'ring-2 ring-blue-500 border-blue-300 dark:border-blue-700' : ''}`}>
                     {/* Header: avatar kelompok + nama + tanggal chip */}
                     <div className="flex items-start gap-3">
                         <div className={`w-11 h-11 rounded-xl ${avatarColorFor(h.groupName)} flex items-center justify-center shrink-0 shadow-sm`}>
@@ -364,10 +406,16 @@ export default function HistoryTab({
                                 <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900" title="Sesi ini sudah ditandai diinput ke SIKS-NG"><CheckCircle size={11}/> Sudah SIKS</span>
                             )}
                         </div>
+                        {pilihMode ? (
+                            <span className={`shrink-0 rounded-lg p-1.5 transition ${dipilih ? 'text-blue-600 dark:text-blue-400' : 'text-gray-300 dark:text-gray-600'}`} aria-hidden="true">
+                                {dipilih ? <CheckSquare size={20} /> : <Square size={20} />}
+                            </span>
+                        ) : (
                         <div className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1">
                             <button onClick={(e) => { e.stopPropagation(); onExportSiks(h); }} className="p-2 rounded-lg text-gray-300 dark:text-gray-600 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition" title="Export SIKS-NG (file JSON untuk bot p2k2-siks)" aria-label="Export SIKS-NG"><Send size={15} /></button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(h.id); }} className="p-2 rounded-lg text-gray-300 dark:text-gray-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Hapus Riwayat" aria-label="Hapus Riwayat"><Trash2 size={15} /></button>
                         </div>
+                        )}
                     </div>
 
                     <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2rem]">{h.materi || '—'}</p>
@@ -398,7 +446,11 @@ export default function HistoryTab({
 
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
                         <SessionThumb item={h} loadPhoto={loadPhoto} />
-                        <span className="text-[11px] text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors flex items-center gap-0.5">Ketuk untuk edit <ChevronRight size={13}/></span>
+                        {pilihMode ? (
+                            <span className={`text-[11px] font-bold ${dipilih ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}>{dipilih ? 'Dipilih' : 'Ketuk untuk memilih'}</span>
+                        ) : (
+                            <span className="text-[11px] text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors flex items-center gap-0.5">Ketuk untuk edit <ChevronRight size={13}/></span>
+                        )}
                     </div>
                 </div>
                 );
@@ -417,6 +469,15 @@ export default function HistoryTab({
                 </div>
             )}
         </div>
+        )}
+
+        {/* Bilah aksi hapus massal — menempel di bawah supaya terjangkau saat daftar panjang */}
+        {pilihMode && (
+            <div className="fixed left-3 right-3 bottom-20 sm:bottom-6 z-40 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-3 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4">
+                <span className="flex-1 min-w-0 text-xs font-bold text-gray-700 dark:text-gray-200 tabular-nums">{terpilih.size} sesi dipilih</span>
+                <button type="button" onClick={() => setTerpilih(new Set(urutHistory.map(h => String(h.id))))} className="shrink-0 px-3 py-2 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition">Pilih semua ({urutHistory.length})</button>
+                <button type="button" disabled={terpilih.size === 0} onClick={() => { onDeleteMany([...terpilih]); setTerpilih(new Set()); setPilihMode(false); }} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:scale-95 shadow-lg shadow-red-600/25 transition disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none"><Trash2 size={13}/> Hapus</button>
+            </div>
         )}
     </div>
   );
