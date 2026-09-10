@@ -137,7 +137,7 @@ export const exportSemesterPDF = async ({ action, history, data, semesterYear, s
     } catch (e) { console.error(e); showAlert("Error", "Gagal membuat PDF Semester"); } finally { setIsGeneratingPDF(false); }
 };
 
-export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bulananMonth, bulananGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl }) => {
+export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bulananMonth, bulananGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl, loadPhoto }) => {
     setIsGeneratingPDF(true); 
     try { 
         const doc = new jsPDF();
@@ -200,7 +200,9 @@ export const exportLaporanBulananPDF = async ({ action, history, bulananYear, bu
             const boxWidth = 160; const boxHeight = 100;
             if (finalY + boxHeight > 280) { doc.addPage(); finalY = 20; doc.text("Lampiran Dokumentasi Foto-foto Kegiatan P2K2/FDS setiap Kelompok", 14, finalY); finalY += 10; }
 
-            const photoToUse = historyItem.fotoKegiatan || groupConfigs[currentGroupName]?.fotoKegiatan || currentConfig.fotoKegiatan;
+            // Sesi lama: foto menempel di dokumennya. Sesi baru: diambil dari koleksi
+            // history_media lewat loadPhoto (hanya sesi yang sedang dicetak).
+            const photoToUse = historyItem.fotoKegiatan || (loadPhoto ? await loadPhoto(historyItem) : null) || groupConfigs[currentGroupName]?.fotoKegiatan || currentConfig.fotoKegiatan;
             if (photoToUse) {
                 try { doc.addImage(photoToUse, 'JPEG', 15, finalY, boxWidth, boxHeight); doc.setDrawColor(0); doc.setLineWidth(0.1); doc.rect(15, finalY, boxWidth, boxHeight); } catch(e) { console.error("Img Error", e); }
             } else { doc.setDrawColor(150); doc.setLineWidth(0.5); doc.rect(15, finalY, boxWidth, boxHeight); doc.setTextColor(150); doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("Tidak ada foto dilampirkan saat sesi ini", 15 + (boxWidth/2), finalY + (boxHeight/2), { align: 'center' }); doc.setTextColor(0); }

@@ -17,6 +17,43 @@ const formatTanggal = (iso) => {
 // supaya riwayat bertahun-tahun tidak dirender sekaligus (tetap ringan di HP).
 const PAGE_SIZE = 12;
 
+/**
+ * Thumbnail foto sesi.
+ * Sesi LAMA: fotonya sudah menempel di dokumen sesi → tampil langsung.
+ * Sesi BARU: fotonya tinggal di koleksi terpisah, jadi baru diambil saat kartu ini
+ * benar-benar muncul (loading="lazy" saja tak cukup — datanya memang belum ada).
+ * Hasilnya di-cache di memori oleh utils/historyMedia.js, jadi tiap kartu = 1 unduhan.
+ */
+function SessionThumb({ item, loadPhoto }) {
+  const punyaFoto = !!(item.fotoKegiatan || item.hasFoto);
+  const [src, setSrc] = useState(item.fotoKegiatan || null);
+
+  useEffect(() => {
+    if (src || !punyaFoto || !loadPhoto) return;
+    let batal = false;
+    Promise.resolve(loadPhoto(item)).then(f => { if (!batal && f) setSrc(f); }).catch(() => {});
+    return () => { batal = true; };
+  }, [item, punyaFoto, src, loadPhoto]);
+
+  if (!punyaFoto) {
+    return <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"><ImageOff size={11}/> Belum ada foto</span>;
+  }
+  if (!src) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0"><Loader2 className="animate-spin text-gray-400" size={12}/></span>
+        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">Memuat foto…</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-2">
+      <img src={src} alt="Foto kegiatan" loading="lazy" className="w-9 h-9 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-700 shrink-0" />
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><Camera size={11}/> Foto</span>
+    </span>
+  );
+}
+
 export default function HistoryTab({
   isLaporanBulananOpen, setIsLaporanBulananOpen, setShowBulananMonthModal,
   bulananMonth, bulananYear, setBulananYear, setShowBulananGroupModal,
@@ -28,7 +65,7 @@ export default function HistoryTab({
   historyFilterMonth, setHistoryFilterMonth, textColor, cardColor,
   handleEditHistory, handleDeleteHistory, onExportSiks, onImportSiksResult,
   isRekapOpen, setIsRekapOpen, rekapMonth, rekapYear, setRekapYear, setShowRekapMonthModal, handleBuildRekap,
-  historyCoverage, handleInputKelompok
+  historyCoverage, handleInputKelompok, loadPhoto
 }) {
   const listRef = useReveal({ deps: [filteredHistory.length, historyFilterMonth, historyFilterGroup], stagger: 0.045, y: 16 });
   const importSiksRef = useRef(null);
@@ -308,7 +345,6 @@ export default function HistoryTab({
         <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {shownHistory.map(h => {
                 const pct = h.stats.total ? Math.round((h.stats.present / h.stats.total) * 100) : 0;
-                const hasFoto = !!h.fotoKegiatan;
                 // Rincian tri-state dari baris yang diarsipkan (details[].status).
                 const att = countArchivedAttendance(h.details);
                 const legacy = Array.isArray(h.details) && h.details.length > 0 && h.details.some(isLegacyAttendance);
@@ -361,14 +397,7 @@ export default function HistoryTab({
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
-                        {hasFoto ? (
-                            <span className="inline-flex items-center gap-2">
-                                <img src={h.fotoKegiatan} alt="Foto kegiatan" loading="lazy" className="w-9 h-9 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-700 shrink-0" />
-                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><Camera size={11}/> Foto</span>
-                            </span>
-                        ) : (
-                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"><ImageOff size={11}/> Belum ada foto</span>
-                        )}
+                        <SessionThumb item={h} loadPhoto={loadPhoto} />
                         <span className="text-[11px] text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors flex items-center gap-0.5">Ketuk untuk edit <ChevronRight size={13}/></span>
                     </div>
                 </div>

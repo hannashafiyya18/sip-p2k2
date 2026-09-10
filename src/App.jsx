@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   CheckCircle, Loader2, Eye, X, FileText, Plus, RefreshCw,
   History, CheckCheck, Save, Search, Check, Minus, AlertTriangle,
@@ -15,6 +15,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, writeBatch } fro
 import { AID_VALUES, COMPONENT_LABELS, PKH_MODULES, INITIAL_DATA, UNDERSTANDING_LEVELS, DEFAULT_CONFIG, STORAGE_KEY_DATA, STORAGE_KEY_CONFIG, STORAGE_KEY_HISTORY, STORAGE_KEY_VIEW_SETTINGS, STORAGE_KEY_AUTO_ASSESS, STORAGE_KEY_LOGO_KIRI, STORAGE_KEY_LOGO_KANAN, ATTENDANCE_HADIR, ATTENDANCE_SAKIT, ATTENDANCE_ALFA, ATTENDANCE_STATUSES, ATTENDANCE_LABELS, SIKS_MATERI } from './utils/constants';
 import { calculateTotalAid, sanitizeForFirestore, compressImage, safeSetItem, stripHeavyHistoryFields, deriveUnderstanding, findDuplicateKpm, workingStatus, archivedStatus, withAttendance, countAttendance, isAttendanceStatus } from './utils/helpers';
 import { exportGraduationLetter, exportSemesterPDF, exportLaporanBulananPDF, exportAbsensiPDF, exportPemantauanSesiPDF } from './utils/pdfGenerator';
+import { muatFotoSesi, muatBanyakFotoSesi, ingatFotoSesi, lupakanFotoSesi } from './utils/historyMedia';
 import { buildRekapKecamatan, rekapRowValues, downloadRekapXLSX } from './utils/rekapGenerator';
 
 // --- IMPORT KOMPONEN UI ---
@@ -673,9 +674,14 @@ export default function App() {
   }); };
 
   // --- EXPORT SIKS-NG & IMPOR HASIL BOT (p2k2-siks-bot) ---
-  const openExportSiks = (h) => {
+  const openExportSiks = async (h) => {
     setExportSiks(h);
     setExportSiksForm(defaultFormExport(h, currentConfig.pendamping || DEFAULT_CONFIG.pendamping));
+    // Foto sesi baru disimpan terpisah; ambil dulu supaya berkas foto & label "3 file" benar.
+    if (!h.fotoKegiatan && h.hasFoto) {
+      const foto = await muatFotoSesi({ db, appId, uid: user?.uid, item: h });
+      if (foto) setExportSiks(prev => (prev && prev.id === h.id ? { ...prev, fotoKegiatan: foto } : prev));
+    }
   };
   const closeExportSiks = () => { setExportSiks(null); setExportSiksForm(null); };
   const setExportField = (key, value) => setExportSiksForm((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -721,7 +727,7 @@ export default function App() {
         if (user && db) {
           let okN = 0;
           for (const h of cocok) {
-            try { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(h.id)), sanitizeForFirestore({ ...h, siks: 'sudah' })); okN++; }
+            try { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(h.id)), sanitizeForFirestore(h.hasFoto ? { ...h, fotoKegiatan: null, siks: 'sudah' } : { ...h, siks: 'sudah' })); okN++; }
             catch (e) { console.error("Tandai SIKS gagal", e); }
           }
           showToast(okN === cocok.length ? `${okN} sesi ditandai Sudah SIKS` : `${okN}/${cocok.length} tersimpan ke cloud — jalankan sekali lagi utk sisanya`, okN === cocok.length ? 'success' : 'warning');
@@ -750,6 +756,15 @@ export default function App() {
       setHistoryEditSearch("");
       setHistoryMetaOpen(false);
       setEditingHistory(historyItem);
+      // Sesi baru menyimpan fotonya terpisah — ambil menyusul supaya modal tidak tertahan menunggu.
+      if (!historyItem.fotoKegiatan && historyItem.hasFoto) {
+          muatFotoSesi({ db, appId, uid: user?.uid, item: historyItem })
+              .then(foto => {
+                  if (foto) setTempHistoryMeta(prev => (prev.fotoKegiatan ? prev : { ...prev, fotoKegiatan: foto }));
+                  else showToast("Foto sesi ini tidak ditemukan di penyimpanan.", 'warning');
+              })
+              .catch(() => {});
+      }
   };
 
   const handleTempHistoryChange = (index, field, value) => { const newDetails = [...tempHistoryDetails]; newDetails[index] = { ...newDetails[index], [field]: value }; if (field === 'presence') { if (value === true) newDetails[index].understanding = 'Baik'; else newDetails[index].understanding = '-'; } setTempHistoryDetails(newDetails); };
@@ -792,7 +807,27 @@ export default function App() {
       const detailsToSave = tempHistoryDetails.map(({ statusWarisan, ...d }) => d);
       const updatedHistoryItem = { ...editingHistory, ...restMeta, date: tanggal || editingHistory.date, details: detailsToSave, stats: { total: totalCount, present: presentCount, absent: absentCount } };
       setHistory(prev => prev.map(h => h.id === editingHistory.id ? updatedHistoryItem : h));
-      if (user && db) { try { const histRef = doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(editingHistory.id)); await setDoc(histRef, sanitizeForFirestore(updatedHistoryItem)); showToast("Perubahan Riwayat Disimpan"); } catch (e) { console.error("Update History Error", e); showAlert("Error", "Gagal menyimpan perubahan ke database."); } } else { showToast("Perubahan Riwayat Disimpan (Lokal)"); }
+      if (user && db) {
+          try {
+              const histRef = doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(editingHistory.id));
+              if (editingHistory.hasFoto) {
+                  // Sesi gaya baru: foto tinggal di koleksi terpisah. Jangan pernah menaruh
+                  // base64-nya kembali ke dokumen sesi (itu yang membuat daftar Riwayat berat).
+                  const foto = updatedHistoryItem.fotoKegiatan || null;
+                  await setDoc(histRef, sanitizeForFirestore({ ...updatedHistoryItem, fotoKegiatan: null, hasFoto: !!foto }));
+                  if (foto) {
+                      ingatFotoSesi(updatedHistoryItem.id, foto);
+                      await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history_media`, String(updatedHistoryItem.id)), sanitizeForFirestore({ id: updatedHistoryItem.id, fotoKegiatan: foto, savedAt: new Date().toLocaleString() }));
+                  } else {
+                      lupakanFotoSesi(updatedHistoryItem.id);   // foto memang dihapus pendamping
+                  }
+              } else {
+                  // Sesi lama: biarkan apa adanya (fotonya masih menempel di dokumennya).
+                  await setDoc(histRef, sanitizeForFirestore(updatedHistoryItem));
+              }
+              showToast("Perubahan Riwayat Disimpan");
+          } catch (e) { console.error("Update History Error", e); showAlert("Error", "Gagal menyimpan perubahan ke database."); }
+      } else { showToast("Perubahan Riwayat Disimpan (Lokal)"); }
       setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch("");
   };
 
@@ -980,9 +1015,12 @@ export default function App() {
   };
 
   // --- PDF WRAPPERS ---
+  // Satu pintu untuk mengambil foto sebuah sesi (inline untuk sesi lama, koleksi
+  // history_media untuk sesi baru) — dipakai laporan bulanan & kartu di tab Riwayat.
+  const muatFoto = useCallback((item) => muatFotoSesi({ db, appId, uid: user?.uid, item }), [user]);
   const generateGraduationLetter = (kpm) => exportGraduationLetter({ kpm, currentConfig, setIsGeneratingPDF, showAlert, showToast });
   const generateSemesterPDF = (action = 'download') => exportSemesterPDF({ action, history, data, semesterYear, selectedSemester, semesterGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl });
-  const generateLaporanBulananPDF = (action = 'download') => exportLaporanBulananPDF({ action, history, bulananYear, bulananMonth, bulananGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl });
+  const generateLaporanBulananPDF = (action = 'download') => exportLaporanBulananPDF({ action, history, bulananYear, bulananMonth, bulananGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl, loadPhoto: muatFoto });
   const generateAbsensiPDF = (action = 'download') => exportAbsensiPDF({ action, data, selectedGroup, groupConfigs, currentConfig, setIsGeneratingPDF, showAlert, setPdfPreviewUrl });
 
   // --- REKAP KECAMATAN (EXCEL) ---
@@ -1091,9 +1129,18 @@ export default function App() {
   };
 
   // --- BACKUP & RESTORE ---
-  const handleBackupData = () => {
+  const handleBackupData = async () => {
     if (data.length === 0 && history.length === 0) { showAlert("Data Kosong", "Belum ada data KPM atau riwayat untuk dibackup."); return; }
-    const backup = { app: 'SIP-P2K2', version: 1, exportedAt: new Date().toISOString(), data, history, groupConfigs };
+    // Cadangan harus UTUH: foto sesi gaya baru tinggal di koleksi terpisah, jadi diambil dulu
+    // supaya file cadangan tetap memuat semua foto (hanya jalan saat tombolnya ditekan).
+    let riwayatLengkap = history;
+    const perluFoto = (user && db) ? history.filter(h => h.hasFoto && !h.fotoKegiatan) : [];
+    if (perluFoto.length) {
+      showToast(`Menyiapkan cadangan: memuat ${perluFoto.length} foto sesi…`);
+      const fotoMap = await muatBanyakFotoSesi({ db, appId, uid: user.uid, items: perluFoto });
+      riwayatLengkap = history.map(h => (h.hasFoto && !h.fotoKegiatan && fotoMap[String(h.id)]) ? { ...h, fotoKegiatan: fotoMap[String(h.id)] } : h);
+    }
+    const backup = { app: 'SIP-P2K2', version: 1, exportedAt: new Date().toISOString(), data, history: riwayatLengkap, groupConfigs };
     const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1159,10 +1206,36 @@ export default function App() {
      // sesinya sudah selesai), kpmId supaya baris riwayat bisa ditelusuri balik ke KPM
      // tanpa mengandalkan kecocokan nama.
      const sessionDetails = list.map(k => ({ kpmId: k.id, name: k.name, group: k.group, presence: k.presence, status: archivedStatus(k), understanding: k.understanding || "-", nik: k.nik || "-", noKK: k.noKK || "-", address: k.address || "-", components: k.components || {}, note: k.note || "" }));
-     const newHist = sanitizeForFirestore({ id: Date.now(), date: cfg.tanggal, jamMulai: cfg.jamMulai || "", jamSelesai: cfg.jamSelesai || "", groupName, materi: cfg.materi, tempat: cfg.tempat, pemateri: cfg.pemateri, fotoKegiatan: cfg.fotoKegiatan, logoKiri: cfg.logoKiri, logoKanan: cfg.logoKanan, stats: { total: list.length, present, absent: list.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
+     // Foto sesi disimpan TERPISAH (koleksi history_media), bukan di dalam dokumen sesi.
+     // Dokumen riwayat disiarkan seluruhnya ke aplikasi, jadi foto base64 di dalamnya
+     // membuat "buka Riwayat" = mengunduh semua foto. Hanya saat login (ada cloud);
+     // mode tamu tetap menempel di dokumen seperti sebelumnya.
+     const fotoSesi = cfg.fotoKegiatan || null;
+     const pisahFoto = !!(user && db && fotoSesi);
+     const newHist = sanitizeForFirestore({ id: Date.now(), date: cfg.tanggal, jamMulai: cfg.jamMulai || "", jamSelesai: cfg.jamSelesai || "", groupName, materi: cfg.materi, tempat: cfg.tempat, pemateri: cfg.pemateri, fotoKegiatan: pisahFoto ? null : fotoSesi, hasFoto: !!fotoSesi, logoKiri: cfg.logoKiri, logoKanan: cfg.logoKanan, stats: { total: list.length, present, absent: list.length - present }, details: sessionDetails, savedAt: new Date().toLocaleString() });
+     if (fotoSesi) ingatFotoSesi(newHist.id, fotoSesi);   // kartu langsung tampil, tanpa unduh ulang
      setHistory(prev => [newHist, ...prev]);
 
-     if(user && db) { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), newHist); }
+     if(user && db) {
+         try { await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), newHist); }
+         catch (e) { console.error("Simpan sesi gagal", e); }
+         if (pisahFoto) {
+             try {
+                 await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history_media`, String(newHist.id)), sanitizeForFirestore({ id: newHist.id, fotoKegiatan: fotoSesi, savedAt: newHist.savedAt }));
+             } catch (e) {
+                 // Foto dokumentasi TIDAK BOLEH hilang: bila gagal dipisah, kembalikan ke dokumen sesi.
+                 console.error("Simpan foto sesi terpisah gagal — dikembalikan ke dokumen sesi", e);
+                 try {
+                     const fallback = sanitizeForFirestore({ ...newHist, fotoKegiatan: fotoSesi });
+                     await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/history`, String(newHist.id)), fallback);
+                     setHistory(prev => prev.map(x => x.id === newHist.id ? { ...x, fotoKegiatan: fotoSesi } : x));
+                 } catch (e2) {
+                     console.error("Fallback foto sesi gagal", e2);
+                     showAlert("Foto Sesi Gagal Diunggah", "Sesi sudah tersimpan, tetapi fotonya belum berhasil disimpan ke akun. Buka sesi ini di Riwayat lalu unggah ulang fotonya.");
+                 }
+             }
+         }
+     }
 
      const idSet = new Set(list.map(i => i.id));
      setData(prev => prev.map(item => idSet.has(item.id) ? { ...item, presence: false, status: null, understanding: "-", note: "", understandingManual: false } : item));
@@ -1535,7 +1608,7 @@ export default function App() {
               historyFilterGroup={historyFilterGroup} historyFilterYear={historyFilterYear} setHistoryFilterYear={setHistoryFilterYear}
               historyFilterMonth={historyFilterMonth} setHistoryFilterMonth={setHistoryFilterMonth} textColor={textColor} cardColor={cardColor}
               handleEditHistory={handleEditHistory} handleDeleteHistory={handleDeleteHistory}
-              onExportSiks={openExportSiks} onImportSiksResult={handleImportSiksResult}
+              onExportSiks={openExportSiks} onImportSiksResult={handleImportSiksResult} loadPhoto={muatFoto}
               isRekapOpen={isRekapOpen} setIsRekapOpen={setIsRekapOpen} rekapMonth={rekapMonth} rekapYear={rekapYear}
               setRekapYear={setRekapYear} setShowRekapMonthModal={setShowRekapMonthModal} handleBuildRekap={handleBuildRekap}
               historyCoverage={historyCoverage} handleInputKelompok={handleInputKelompok}
