@@ -19,6 +19,12 @@ const HHmm = (s) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s == null ? '' : s
 // Baku yang dipakai: "P2K2 <KELOMPOK> - <modul ringkas>".
 export const NAMA_SIKS_MAX = 100;
 
+// Batas field "Uraian Kegiatan" di SIKS-NG = 1000 KARAKTER (portal menampilkan
+// penghitung "n / 1000 karakter", temuan 2026-09-12). Aturan lama kita (500 kata,
+// ± 3.400 karakter) jauh lebih longgar sehingga TIDAK menangkap uraian 1.500
+// karakter yang ditolak — atau lebih buruk dipotong diam-diam oleh portal.
+export const URAIAN_SIKS_MAX = 1000;
+
 // Jargon judul modul yang selalu berulang -> dibuang supaya nama pendek.
 const JARGON_MODUL_SIKS = [
   /^(modul\s+)?p2k2\s+adaptif\s*\/\s*/i,
@@ -111,8 +117,15 @@ export function buildExportKegiatan(h, form) {
 
   const uraian = normTeks(form.uraian);
   const kataUraian = hitungKata(uraian);
-  if (kataUraian > 500) masalah.push(`Uraian ${kataUraian} kata melebihi batas SIKS (500 kata) — ringkas dulu.`);
-  else if (kataUraian < 10) peringatan.push('Uraian sangat pendek (<10 kata) — pastikan sudah sesuai kegiatan.');
+  const karakterUraian = uraian.length;
+  // Batas MENGIKAT = karakter (counter portal). Uraian >1000 karakter = export diblokir.
+  if (karakterUraian > URAIAN_SIKS_MAX) {
+    masalah.push(`Uraian ${karakterUraian} karakter — SIKS membatasi ${URAIAN_SIKS_MAX} karakter (lebih dari itu ditolak atau dipotong portal). Ringkas dulu.`);
+  } else if (kataUraian > 500) {
+    masalah.push(`Uraian ${kataUraian} kata melebihi aturan lama 500 kata — ringkas dulu.`);
+  } else if (kataUraian < 10) {
+    peringatan.push('Uraian sangat pendek (<10 kata) — pastikan sudah sesuai kegiatan.');
+  }
 
   // Peserta dari details riwayat (nik/noKK dibekukan saat arsip; '-' dianggap kosong)
   const details = Array.isArray(h.details) ? h.details : [];
@@ -158,7 +171,7 @@ export function buildExportKegiatan(h, form) {
     },
   };
 
-  return { json, pesertaCount: peserta.length, statHadir: hadir, statSakit: sakit, statAlfa: alfa, kataUraian, masalah, peringatan };
+  return { json, pesertaCount: peserta.length, statHadir: hadir, statSakit: sakit, statAlfa: alfa, kataUraian, karakterUraian, masalah, peringatan };
 }
 
 /** Nama file aman untuk diunduh: export-siks-<tanggal>-<kelompok>.json */

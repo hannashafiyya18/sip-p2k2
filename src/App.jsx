@@ -1480,8 +1480,8 @@ export default function App() {
             </div>
 
             <div>
-              <label className={lbl}>Uraian Kegiatan <span className="text-red-500">*</span> <span className={`normal-case font-semibold ${exs.kataUraian > 500 ? 'text-red-500' : 'text-gray-400'}`}>({exs.kataUraian}/500 kata)</span></label>
-              <textarea rows={6} value={exportSiksForm.uraian || ""} onChange={(e) => setExportField('uraian', e.target.value)} className={`${inp} resize-none leading-relaxed`} placeholder="Uraian kegiatan (maks 500 kata)..." />
+              <label className={lbl}>Uraian Kegiatan <span className="text-red-500">*</span> <span className={`font-semibold ${exs.karakterUraian > 1000 ? 'text-red-500' : 'text-gray-400'}`}>({exs.karakterUraian}/1000 karakter &middot; &asymp;{exs.kataUraian} kata)</span></label>
+              <textarea rows={6} maxLength={1000} value={exportSiksForm.uraian || ""} onChange={(e) => setExportField('uraian', e.target.value)} className={`${inp} resize-none leading-relaxed`} placeholder="Uraian kegiatan (maks 1000 karakter)..." />
             </div>
 
             <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 px-3.5 py-2.5 text-[11px] leading-relaxed text-blue-700 dark:text-blue-300">
