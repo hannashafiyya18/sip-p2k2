@@ -12,6 +12,58 @@ const hitungKata = (s) => { const t = normTeks(s); return t ? t.split(/\s+/).len
 // Validasi & normalisasi jam HH:mm — kosong bila tidak valid (dipakai utk nilai riwayat lama).
 const HHmm = (s) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s == null ? '' : s).trim()) ? String(s).trim() : '');
 
+// Batas SIKS-NG: field "Nama Kegiatan" di wizard menolak isi > 100 karakter
+// (temuan 2026-09-12: muncul teks merah "Nama Kegiatan maksimal 100 karakter"
+// dan tombol Proses tidak lolos). Nama lama "<KELOMPOK> — <judul modul + slogan>"
+// panjangnya 121-129 karakter sehingga SELALU ditolak portal.
+// Baku yang dipakai: "P2K2 <KELOMPOK> - <modul ringkas>".
+export const NAMA_SIKS_MAX = 100;
+
+// Jargon judul modul yang selalu berulang -> dibuang supaya nama pendek.
+const JARGON_MODUL_SIKS = [
+  /^(modul\s+)?p2k2\s+adaptif\s*\/\s*/i,
+  /^materi\s+tambahan\s*[-–—]\s*/i,
+  /^(modul\s+)?p2k2\s*[-–—]\s*/i,
+];
+
+/** Potong di batas kata (kata tak pernah terbelah) supaya nama tetap terbaca. */
+export function potongKataSiks(teks, maks) {
+  const t = normTeks(teks);
+  if (maks <= 0) return '';
+  if (t.length <= maks) return t;
+  const awal = t.slice(0, maks);
+  const spasi = awal.lastIndexOf(' ');
+  return normTeks((spasi > 0 ? awal.slice(0, spasi) : awal).replace(/[\s,;:\-–—]+$/, ''));
+}
+
+/** Inti topik modul: buang jargon + slogan dalam tanda kutip.
+ *  'Modul P2K2 Adaptif / Materi Tambahan - Bahaya Judi Online "Jangan …"'
+ *   -> 'Bahaya Judi Online' */
+export function ringkasModulSiks(judul) {
+  let t = normTeks(judul).split(/["“”]/)[0];
+  for (const re of JARGON_MODUL_SIKS) t = t.replace(re, '');
+  return t.replace(/^[\s,\-–—:]+|[\s,\-–—:]+$/g, '').trim();
+}
+
+/** Nama kegiatan baku untuk form SIKS: "P2K2 <KELOMPOK> - <modul ringkas>",
+ *  dipastikan <= NAMA_SIKS_MAX karakter. Kelompok = identitas kegiatan, tak
+ *  pernah dibuang; bagian modul yang mengalah lebih dulu. */
+export function namaKegiatanSIKS(h) {
+  const kelompok = normTeks(h && h.groupName);
+  const modul = ringkasModulSiks(h && h.materi);
+  const kepala = kelompok ? `P2K2 ${kelompok}` : 'P2K2';
+  const gabung = (m) => (kelompok
+    ? (m ? `${kepala} - ${m}` : kepala)
+    : normTeks(`P2K2 ${m}`));
+  let nama = gabung(modul);
+  if (nama.length > NAMA_SIKS_MAX) {
+    const jatah = NAMA_SIKS_MAX - (kelompok ? kepala.length + 3 : 5);
+    nama = gabung(potongKataSiks(modul, jatah));
+  }
+  if (nama.length > NAMA_SIKS_MAX) nama = potongKataSiks(nama, NAMA_SIKS_MAX);
+  return nama;
+}
+
 /** Baris peserta dari satu detail riwayat → kontrak. Status lama (tanpa tri-state)
  *  diturunkan sama seperti laporan: presence true = HADIR, false = ALFA. */
 const kehadiranDetail = (d) =>
@@ -30,6 +82,13 @@ export function buildExportKegiatan(h, form) {
 
   const nama = normTeks(form.nama);
   if (!nama) masalah.push('Nama kegiatan wajib diisi.');
+  // Batas portal SIKS-NG (2026-09-12): >100 karakter ditolak ("Nama Kegiatan
+  // maksimal 100 karakter") -> export diblokir supaya bot tidak mengisi buta.
+  if (nama.length > NAMA_SIKS_MAX) {
+    masalah.push(`Nama kegiatan ${nama.length} karakter — SIKS menolak di atas ${NAMA_SIKS_MAX} karakter. Contoh baku: "P2K2 <KELOMPOK> - <modul>".`);
+  } else if (!/^p2k2\b/i.test(nama)) {
+    peringatan.push('Nama kegiatan belum diawali "P2K2" — disarankan "P2K2 <KELOMPOK> - <modul>".');
+  }
 
   const tanggal = normTeks(form.tanggal);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) masalah.push('Tanggal kegiatan belum valid (format YYYY-MM-DD).');
@@ -113,7 +172,7 @@ export function namaFileExport(h, tanggal) {
 export function defaultFormExport(h, pendamping) {
   const tanggal = normTeks(h.date) || new Date().toISOString().split('T')[0];
   return {
-    nama: `${normTeks(h.groupName)} — ${normTeks(h.materi) || 'P2K2'}`,
+    nama: namaKegiatanSIKS(h),
     materiSiks: guessSiksMateri(h.materi),
     tanggal,
     jamMulai: HHmm(h.jamMulai) || '09:00',

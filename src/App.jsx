@@ -28,7 +28,7 @@ import GraduasiTab from './components/tabs/GraduasiTab';
 import ChatBot from './components/layout/ChatBot';
 
 import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
-import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses } from './utils/siksGenerator';
+import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS } from './utils/siksGenerator';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -1452,8 +1452,11 @@ export default function App() {
 
           <div className="space-y-4">
             <div>
-              <label className={lbl}>Nama Kegiatan <span className="text-red-500">*</span></label>
-              <input type="text" value={exportSiksForm.nama || ""} onChange={(e) => setExportField('nama', e.target.value)} className={inp} placeholder="Nama kegiatan di form SIKS..." />
+              <label className={lbl}>Nama Kegiatan <span className="text-red-500">*</span> <span className="font-semibold text-gray-400">({(exportSiksForm.nama || "").length}/100)</span>
+                <button type="button" onClick={() => setExportField('nama', namaKegiatanSIKS(exportSiks))} className="ml-2 text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline">pakai nama baku</button>
+              </label>
+              <input type="text" value={exportSiksForm.nama || ""} maxLength={100} onChange={(e) => setExportField('nama', e.target.value)} className={inp} placeholder="P2K2 <KELOMPOK> - <modul>..." />
+              <p className="text-[10px] text-gray-400 mt-1">SIKS-NG menolak nama lebih dari 100 karakter. Baku: <b>P2K2 {exportSiks.groupName} - modul</b> (klik "pakai nama baku" untuk mengembalikan).</p>
             </div>
 
             <div>
