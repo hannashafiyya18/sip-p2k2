@@ -126,6 +126,13 @@ export function buildExportKegiatan(h, form) {
   } else if (kataUraian < 10) {
     peringatan.push('Uraian sangat pendek (<10 kata) — pastikan sudah sesuai kegiatan.');
   }
+  // Ketentuan SIKS: uraian memuat 5 aspek. Kurangnya aspek hanya diperingatkan
+  // (tidak memblokir) — pendamping yang tahu kondisi nyata di lapangan.
+  const aspekUraian = deteksiAspekUraian(uraian);
+  const kurangAspek = URAIAN_ASPEK_WAJIB.filter((kkunci) => !aspekUraian[kkunci]);
+  if (kurangAspek.length) {
+    peringatan.push(`Uraian belum menyebut: ${kurangAspek.map((kkunci) => URAIAN_ASPEK_LABEL[kkunci]).join(', ')}.`);
+  }
 
   // Peserta dari details riwayat (nik/noKK dibekukan saat arsip; '-' dianggap kosong)
   const details = Array.isArray(h.details) ? h.details : [];
@@ -171,7 +178,7 @@ export function buildExportKegiatan(h, form) {
     },
   };
 
-  return { json, pesertaCount: peserta.length, statHadir: hadir, statSakit: sakit, statAlfa: alfa, kataUraian, karakterUraian, masalah, peringatan };
+  return { json, pesertaCount: peserta.length, statHadir: hadir, statSakit: sakit, statAlfa: alfa, kataUraian, karakterUraian, aspekUraian, masalah, peringatan };
 }
 
 /** Nama file aman untuk diunduh: export-siks-<tanggal>-<kelompok>.json */
@@ -179,6 +186,124 @@ export function namaFileExport(h, tanggal) {
   const slug = String(h.groupName || 'kegiatan')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'kegiatan';
   return `export-siks-${String(tanggal || '').slice(0, 10) || 'tanpa-tanggal'}-${slug}.json`;
+}
+
+// ---------------------------------------------------------------------------
+// Uraian kegiatan: 5 aspek ketentuan SIKS + anggaran 1000 karakter
+// ---------------------------------------------------------------------------
+// Ketentuan (placeholder portal + arahan Mas 2026-09-12): uraian harus memuat
+// (1) proses pelaksanaan, (2) materi yang disampaikan, (3) partisipasi peserta,
+// (4) hasil kegiatan, serta (5) kendala & tindak lanjut bila ada. Plafon portal
+// = 1000 KARAKTER. Generator di bawah menyusun uraian dari DATA SESI (tidak
+// mengarang): 3 segmen inti selalu masuk, lalu hasil/kendala/tindak lanjut
+// dimasukkan selama masih muat — yang tidak muat dicatat, bukan dipotong buta.
+export const URAIAN_ASPEK_WAJIB = ['proses', 'materi', 'partisipasi', 'hasil', 'kendala'];
+export const URAIAN_ASPEK_LABEL = {
+  proses: 'proses pelaksanaan',
+  materi: 'materi yang disampaikan',
+  partisipasi: 'partisipasi peserta',
+  hasil: 'hasil kegiatan',
+  kendala: 'kendala & tindak lanjut',
+};
+
+const BULAN_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+/** "2026-09-04" -> "Jumat, 4 September 2026" (aman untuk format lain: dikembalikan apa adanya). */
+export function tanggalPanjangID(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normTeks(iso));
+  if (!m) return normTeks(iso);
+  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return normTeks(iso);
+  return `${HARI_ID[d.getDay()]}, ${Number(m[3])} ${BULAN_ID[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+/** Statistik kehadiran dari details[] riwayat (tri-state status/presence). */
+export function statistikPeserta(h) {
+  const det = Array.isArray(h && h.details) ? h.details : [];
+  const nama = (d) => normTeks(d && d.name);
+  const stat = (d) => (KE[d && d.status] ? d.status : (d && d.presence ? KE.HADIR : KE.ALFA));
+  const hadir = det.filter((d) => stat(d) === KE.HADIR);
+  const sakit = det.filter((d) => stat(d) === KE.SAKIT);
+  const alfa = det.filter((d) => stat(d) === KE.ALFA);
+  return {
+    total: det.length,
+    hadir: hadir.length,
+    sakit: sakit.length,
+    alfa: alfa.length,
+    namaSakit: sakit.map(nama).filter(Boolean),
+    namaAlfa: alfa.map(nama).filter(Boolean),
+    persenHadir: det.length ? Math.round((hadir.length / det.length) * 100) : 0,
+  };
+}
+
+/** Deteksi 5 aspek wajib pada teks uraian (checklist di app & peringatan di bot). */
+export function deteksiAspekUraian(teks) {
+  const t = ` ${normTeks(teks).toLowerCase()} `;
+  return {
+    proses: /(pelaksanaan|dilaksanakan|berlangsung|pukul|dipandu|dibuka|dimulai)/.test(t),
+    materi: /(materi|modul|disampaikan|tema|topik)/.test(t),
+    partisipasi: /(peserta|dihadiri|hadir|sakit|alfa|kpm)/.test(t),
+    hasil: /(hasil|terlaksana|tercapai|memahami|sepakat|manfaat|tersampaikan)/.test(t),
+    kendala: /(kendala|hambatan|tindak lanjut|tindaklanjut|kunjungan|pertemuan berikutnya|penjadwalan ulang)/.test(t),
+  };
+}
+
+/** Potong pada batas KALIMAT terakhir (selalu berakhir titik), bukan batas kata. */
+export function potongKalimatSiks(teks, maks = URAIAN_SIKS_MAX) {
+  const t = normTeks(teks);
+  if (t.length <= maks) return t;
+  const awal = t.slice(0, maks);
+  const titik = Math.max(awal.lastIndexOf('.'), awal.lastIndexOf('!'), awal.lastIndexOf('?'));
+  if (titik > 0) return normTeks(awal.slice(0, titik + 1));
+  return potongKataSiks(t, maks);
+}
+
+/** Susun uraian 5 aspek dari data sesi, dijamin <= URAIAN_SIKS_MAX karakter.
+ *  opsi: { sebutNama, tanggal, jamMulai, jamSelesai, tempat, pemateriNama,
+ *          pemateriInstansi, pendamping } — nilai form yang sedang diedit menang. */
+export function buildUraianSIKS(h, opsi = {}) {
+  const st = statistikPeserta(h);
+  const grup = normTeks(h && h.groupName) || 'KPM';
+  const tanggal = normTeks(opsi.tanggal || (h && h.date));
+  const j1 = HHmm(opsi.jamMulai || (h && h.jamMulai));
+  const j2 = HHmm(opsi.jamSelesai || (h && h.jamSelesai));
+  const jam = j1 && j2 ? `${j1}-${j2}` : (j1 || j2 || '');
+  const tempat = normTeks(opsi.tempat || (h && h.tempat)) || 'tempat kegiatan';
+  const pemateri = normTeks(opsi.pemateriNama || opsi.pendamping || '');
+  const instansi = normTeks(opsi.pemateriInstansi) || normTeks(h && h.pemateri) || 'Pendamping Sosial PKH';
+  const materi = ringkasModulSiks((h && h.materi) || '') || 'P2K2';
+  const takHadir = st.sakit + st.alfa;
+  const namaTakHadir = [...st.namaSakit, ...st.namaAlfa];
+  const sebut = !!opsi.sebutNama && namaTakHadir.length > 0;
+
+  const proses = `Pertemuan P2K2 kelompok ${grup} dilaksanakan pada ${tanggalPanjangID(tanggal)}`
+    + `${jam ? ` pukul ${jam} WIB` : ''} di ${tempat}`
+    + `${pemateri ? `, dipandu oleh ${pemateri} (${instansi})` : ''}.`;
+  const segMateri = `Materi yang disampaikan: ${materi}.`;
+  const partisipasi = `Peserta: dari ${st.total} KPM terdaftar, hadir ${st.hadir} KPM, sakit ${st.sakit}, alfa ${st.alfa} (${st.persenHadir}% hadir)`
+    + `${sebut ? `; tidak hadir: ${namaTakHadir.join(', ')}` : ''}.`;
+  const hasil = `Hasil: kegiatan terlaksana sesuai jadwal dan materi tersampaikan kepada ${st.hadir} KPM yang hadir.`;
+  const kendala = takHadir
+    ? `Kendala: ${takHadir} KPM tidak hadir (${[st.sakit ? `${st.sakit} sakit` : '', st.alfa ? `${st.alfa} alfa` : ''].filter(Boolean).join(', ')}) sehingga materi tidak diterima secara langsung.`
+    : 'Kendala: tidak ada kendala berarti, seluruh KPM terdaftar hadir.';
+  const tindak = takHadir
+    ? `Tindak lanjut: ${sebut ? `kunjungan rumah ke ${namaTakHadir.join(', ')}` : 'materi disampaikan ulang kepada KPM yang tidak hadir'} pada pertemuan atau kunjungan berikutnya.`
+    : 'Tindak lanjut: pendamping memantau penerapan materi pada pertemuan berikutnya.';
+
+  // Anggaran karakter: inti selalu masuk, lalu tambahan selama masih muat.
+  let teks = [proses, segMateri, partisipasi].join(' ');
+  const dilewati = [];
+  for (const [nama, kalimat] of [['hasil', hasil], ['kendala', kendala], ['tindakLanjut', tindak]]) {
+    if (teks.length + 1 + kalimat.length <= URAIAN_SIKS_MAX) teks = `${teks} ${kalimat}`;
+    else dilewati.push(nama);
+  }
+  let dipotong = false;
+  if (teks.length > URAIAN_SIKS_MAX) {   // kasus ekstrem: nama kelompok/tempat/pemateri panjang
+    teks = potongKalimatSiks(teks, URAIAN_SIKS_MAX);
+    dipotong = true;
+  }
+  return { uraian: teks, karakter: teks.length, aspek: deteksiAspekUraian(teks), dilewati, dipotong, statistik: st };
 }
 
 /** Isi awal formulir export saat sesi dibuka (default yang bisa diedit). */
@@ -193,7 +318,7 @@ export function defaultFormExport(h, pendamping) {
     tempat: normTeks(h.tempat),
     pemateriNama: normTeks(pendamping),
     pemateriInstansi: normTeks(h.pemateri) || 'Pendamping Sosial PKH',
-    uraian: `Pertemuan P2K2 kelompok ${normTeks(h.groupName)} dengan materi ${normTeks(h.materi) || 'P2K2'} dilaksanakan di ${normTeks(h.tempat) || 'tempat kegiatan'} pada tanggal ${tanggal}.`,
+    uraian: buildUraianSIKS(h, { pemateriNama: normTeks(pendamping), pemateriInstansi: normTeks(h.pemateri) || 'Pendamping Sosial PKH' }).uraian,
     periodeSalur: '',
     pendamping: normTeks(pendamping),
   };

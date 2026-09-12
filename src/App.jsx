@@ -28,7 +28,7 @@ import GraduasiTab from './components/tabs/GraduasiTab';
 import ChatBot from './components/layout/ChatBot';
 
 import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
-import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS } from './utils/siksGenerator';
+import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS, buildUraianSIKS } from './utils/siksGenerator';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -135,6 +135,7 @@ export default function App() {
   // Export SIKS-NG (per sesi riwayat) & impor hasil bot p2k2-siks
   const [exportSiks, setExportSiks] = useState(null);         // sesi riwayat yang sedang diexport
   const [exportSiksForm, setExportSiksForm] = useState(null); // isian formulir export (default bisa diedit)
+  const [sebutNamaUraian, setSebutNamaUraian] = useState(false); // opsi uraian: sebut nama KPM yang tidak hadir
   // const [isAiLoading, setIsAiLoading] = useState(false);
 
   // EFFECTS
@@ -1482,6 +1483,19 @@ export default function App() {
             <div>
               <label className={lbl}>Uraian Kegiatan <span className="text-red-500">*</span> <span className={`font-semibold ${exs.karakterUraian > 1000 ? 'text-red-500' : 'text-gray-400'}`}>({exs.karakterUraian}/1000 karakter &middot; &asymp;{exs.kataUraian} kata)</span></label>
               <textarea rows={6} maxLength={1000} value={exportSiksForm.uraian || ""} onChange={(e) => setExportField('uraian', e.target.value)} className={`${inp} resize-none leading-relaxed`} placeholder="Uraian kegiatan (maks 1000 karakter)..." />
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {[['proses', 'Proses'], ['materi', 'Materi'], ['partisipasi', 'Partisipasi'], ['hasil', 'Hasil'], ['kendala', 'Kendala & TL']].map(([kb, label]) => (
+                  <span key={kb} title={exs.aspekUraian[kb] ? 'sudah disebut' : 'belum disebut'} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${exs.aspekUraian[kb] ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-400'}`}>{exs.aspekUraian[kb] ? '✓' : '○'} {label}</span>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                <button type="button" onClick={() => setExportField('uraian', buildUraianSIKS(exportSiks, { ...exportSiksForm, sebutNama: sebutNamaUraian }).uraian)} className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline">⟳ Susun ulang uraian otomatis (5 aspek)</button>
+                <label className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  <input type="checkbox" checked={sebutNamaUraian} onChange={(e) => { const v = e.target.checked; setSebutNamaUraian(v); setExportField('uraian', buildUraianSIKS(exportSiks, { ...exportSiksForm, sebutNama: v }).uraian); }} />
+                  sebut nama KPM yang tidak hadir
+                </label>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">"Susun ulang" menimpa isi uraian. Kalimat Hasil/Kendala/Tindak lanjut disusun dari data presensi sesi ini — silakan sesuaikan dengan kondisi nyata sebelum export.</p>
             </div>
 
             <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 px-3.5 py-2.5 text-[11px] leading-relaxed text-blue-700 dark:text-blue-300">
