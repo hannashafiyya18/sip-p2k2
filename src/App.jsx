@@ -28,7 +28,7 @@ import GraduasiTab from './components/tabs/GraduasiTab';
 import ChatBot from './components/layout/ChatBot';
 
 import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
-import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS, buildUraianSIKS } from './utils/siksGenerator';
+import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS, buildUraianSIKS, padatkanUraianSiks } from './utils/siksGenerator';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -1482,7 +1482,20 @@ export default function App() {
 
             <div>
               <label className={lbl}>Uraian Kegiatan <span className="text-red-500">*</span> <span className={`font-semibold ${exs.karakterUraian > 1000 ? 'text-red-500' : 'text-gray-400'}`}>({exs.karakterUraian}/1000 karakter &middot; &asymp;{exs.kataUraian} kata)</span></label>
-              <textarea rows={6} maxLength={1000} value={exportSiksForm.uraian || ""} onChange={(e) => setExportField('uraian', e.target.value)} className={`${inp} resize-none leading-relaxed`} placeholder="Uraian kegiatan (maks 1000 karakter)..." />
+              <textarea rows={7} value={exportSiksForm.uraian || ""} onChange={(e) => setExportField('uraian', e.target.value)} className={`${inp} resize-none leading-relaxed`} placeholder="Uraian kegiatan (maks 1000 karakter)..." />
+              {/* Tanpa maxLength: teks yang ditempel TIDAK dipotong diam-diam. Kalau
+                  kelebihan, angkanya merah & tombol Padatkan merapikan sendiri. */}
+              {(exportSiksForm.uraian || "").length > 1000 && (
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <span className="text-[11px] font-bold text-red-600 dark:text-red-400">kelebihan {(exportSiksForm.uraian || "").length - 1000} karakter — export diblokir sampai ≤1000</span>
+                  <button type="button" onClick={() => {
+                    const r = padatkanUraianSiks(exportSiksForm.uraian);
+                    if (!r.dipadatkan) { showToast("Uraian sudah rapi — tidak ada yang bisa dipadatkan otomatis."); return; }
+                    setExportField('uraian', r.teks);
+                    showToast(`Uraian dipadatkan ${r.asli.length} → ${r.teks.length} karakter (${r.tahap.join(' + ')}). ${r.hilang} karakter dibuang${r.sisa ? ` — dibuang: "${r.sisa.slice(0, 100)}${r.sisa.length > 100 ? '…' : ''}"` : ''}`);
+                  }} className="text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-1.5">Padatkan ke ≤1000</button>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {[['proses', 'Proses'], ['materi', 'Materi'], ['partisipasi', 'Partisipasi'], ['hasil', 'Hasil'], ['kendala', 'Kendala & TL']].map(([kb, label]) => (
                   <span key={kb} title={exs.aspekUraian[kb] ? 'sudah disebut' : 'belum disebut'} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${exs.aspekUraian[kb] ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-400'}`}>{exs.aspekUraian[kb] ? '✓' : '○'} {label}</span>

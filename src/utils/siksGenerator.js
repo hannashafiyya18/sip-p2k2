@@ -259,6 +259,69 @@ export function potongKalimatSiks(teks, maks = URAIAN_SIKS_MAX) {
   return potongKataSiks(t, maks);
 }
 
+/** Sisa teks setelah bagian yang dipakai (untuk dilaporkan ke pengguna). */
+function sisaSetelahTeks(teks, dipakai) {
+  const t = normTeks(teks);
+  const d = normTeks(dipakai);
+  if (!d || !t.startsWith(d)) return '';
+  return normTeks(t.slice(d.length));
+}
+
+/** Padatkan uraian supaya muat <= maks karakter (paritas dgn bot p2k2-siks-bot):
+ *  1) buang jargon berulang + normalkan tanda kutip/tanda pisah,
+ *  2) buang kalimat kembar (sisa tempel-ulang),
+ *  3) potong di batas KALIMAT (selalu berakhir titik),
+ *  4) terakhir potong di batas KATA.
+ *  Mengembalikan jejak (tahap + sisa) supaya pemotongan tidak pernah diam-diam. */
+export function padatkanUraianSiks(teks, maks = URAIAN_SIKS_MAX) {
+  const asli = normTeks(teks);
+  // Teks yang sudah patuh DIBIARKAN apa adanya - "padatkan" tidak pernah
+  // menulis ulang uraian yang sudah <= batas (mencegah perubahan diam-diam).
+  if (asli.length <= maks) return { teks: asli, asli, dipadatkan: false, tahap: [], hilang: 0, sisa: '' };
+  const tahap = [];
+  let t = asli;
+
+  // 1. buang jargon berulang + normalkan tanda kutip/tanda pisah
+  const bersih = normTeks(t
+    .replace(/[\u201c\u201d\u201e]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/(modul\s+)?p2k2\s+adaptif\s*\/\s*materi\s+tambahan\s*[-:]\s*/gi, '')
+    .replace(/\bmateri\s+tambahan\s*[-:]\s*/gi, '')
+    .replace(/[""][^""]{20,}[""]/g, ' ')
+    .replace(/\s{2,}/g, ' '));
+  if (bersih.length < t.length) { tahap.push('buang jargon & rapikan tanda baca'); t = bersih; }
+  if (t.length <= maks) return { teks: t, asli, dipadatkan: true, tahap, hilang: asli.length - t.length, sisa: sisaSetelahTeks(asli, t) };
+
+  // 2. buang kalimat kembar (sisa tempel-ulang). Pemisah kalimat memakai penanda
+  //    agar "pukul 14.00." tidak terbelah di titik desimal.
+  let dibuang = 0;
+  const sudah = new Set();
+  const unik = [];
+  for (const k of t.replace(/([.!?])\s+/g, '$1\u0001').split('\u0001').filter((x) => normTeks(x))) {
+    const kunci = k.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (kunci && sudah.has(kunci)) { dibuang++; continue; }
+    sudah.add(kunci);
+    unik.push(k);
+  }
+  if (dibuang > 0) {
+    const tanpaKembar = normTeks(unik.join(' '));
+    if (tanpaKembar.length < t.length) { tahap.push(`buang ${dibuang} kalimat kembar`); t = tanpaKembar; }
+    if (t.length <= maks) return { teks: t, asli, dipadatkan: true, tahap, hilang: asli.length - t.length, sisa: sisaSetelahTeks(asli, t) };
+  }
+
+  // 3. potong di batas KALIMAT (selalu berakhir titik), 4. terakhir batas KATA
+  const hasilKalimat = potongKalimatSiks(t, maks);
+  if (hasilKalimat.length <= maks && hasilKalimat.length < t.length) {
+    // label jujur: kalau sumbernya tak punya tanda baca kalimat, hasilnya potong kata
+    tahap.push(/[.!?]$/.test(hasilKalimat) ? 'potong di batas kalimat' : 'potong di batas kata');
+    return { teks: hasilKalimat, asli, dipadatkan: true, tahap, hilang: asli.length - hasilKalimat.length, sisa: sisaSetelahTeks(t, hasilKalimat) };
+  }
+  const hasilKata = potongKataSiks(t, maks);
+  tahap.push('potong di batas kata');
+  return { teks: hasilKata, asli, dipadatkan: true, tahap, hilang: asli.length - hasilKata.length, sisa: sisaSetelahTeks(t, hasilKata) };
+}
+
 /** Susun uraian 5 aspek dari data sesi, dijamin <= URAIAN_SIKS_MAX karakter.
  *  opsi: { sebutNama, tanggal, jamMulai, jamSelesai, tempat, pemateriNama,
  *          pemateriInstansi, pendamping } — nilai form yang sedang diedit menang. */
