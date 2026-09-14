@@ -28,7 +28,7 @@ import GraduasiTab from './components/tabs/GraduasiTab';
 import ChatBot from './components/layout/ChatBot';
 
 import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
-import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS, buildUraianSIKS, padatkanUraianSiks } from './utils/siksGenerator';
+import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS, buildUraianSIKS, padatkanUraianSiks, PEMATERI_BAKU, PEMATERI_NAMA_DEFAULT, INSTANSI_DEFAULT } from './utils/siksGenerator';
 
 // --- KOMPONEN BANTUAN UI ---
 const renderComponentBadges = (comps, isCompact) => {
@@ -136,6 +136,7 @@ export default function App() {
   const [exportSiks, setExportSiks] = useState(null);         // sesi riwayat yang sedang diexport
   const [exportSiksForm, setExportSiksForm] = useState(null); // isian formulir export (default bisa diedit)
   const [sebutNamaUraian, setSebutNamaUraian] = useState(false); // opsi uraian: sebut nama KPM yang tidak hadir
+  const [tambahPemateri, setTambahPemateri] = useState(false);   // tampilkan slot Pemateri 2 & 3 (opsional)
   // const [isAiLoading, setIsAiLoading] = useState(false);
 
   // EFFECTS
@@ -714,6 +715,7 @@ export default function App() {
   const openExportSiks = async (h) => {
     setExportSiks(h);
     setExportSiksForm(defaultFormExport(h, currentConfig.pendamping || DEFAULT_CONFIG.pendamping));
+    setTambahPemateri(false);
     // Foto sesi baru disimpan terpisah; ambil dulu supaya berkas foto & label "3 file" benar.
     if (!h.fotoKegiatan && h.hasFoto) {
       const foto = await muatFotoSesi({ db, appId, uid: user?.uid, item: h });
@@ -1475,9 +1477,41 @@ export default function App() {
               <div><label className={lbl}>Tempat</label><input type="text" value={exportSiksForm.tempat || ""} onChange={(e) => setExportField('tempat', e.target.value)} className={inp} /></div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className={lbl}>Nama Pemateri</label><input type="text" value={exportSiksForm.pemateriNama || ""} onChange={(e) => setExportField('pemateriNama', e.target.value)} className={inp} placeholder="Nama pemateri..." /></div>
-              <div><label className={lbl}>Instansi Pemateri</label><input type="text" value={exportSiksForm.pemateriInstansi || ""} onChange={(e) => setExportField('pemateriInstansi', e.target.value)} className={inp} /></div>
+            {/* PEMATERI — SIKS menyediakan 3 pasang kolom. Kolom "Nama" = PERAN
+                (bukan nama orang), kolom "Instansi" = LEMBAGA INDUK (baku 2026-09-14). */}
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <label className="text-xs font-bold text-gray-400 block">Pemateri (peran &amp; instansi)</label>
+                {(tambahPemateri || exportSiksForm.pemateri2Nama || exportSiksForm.pemateri3Nama) ? null : (
+                  <button type="button" onClick={() => setTambahPemateri(true)} className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline">+ tambah pemateri 2/3</button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {PEMATERI_BAKU.map((p) => (
+                  <button key={p.nama} type="button" title={`Nama: ${p.nama} · Instansi: ${p.instansi}`}
+                    onClick={() => { setExportSiksForm((prev) => (prev ? { ...prev, pemateriNama: p.nama, pemateriInstansi: p.instansi } : prev)); showToast(`Pemateri 1: ${p.nama} — ${p.instansi}. Klik "Susun ulang uraian otomatis" bila ingin uraian ikut menyebutnya.`); }}
+                    className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-100">{p.nama}</button>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className={lbl}>Nama Pemateri 1 <span className="font-semibold text-gray-400">(peran)</span></label><input type="text" value={exportSiksForm.pemateriNama || ""} onChange={(e) => setExportField('pemateriNama', e.target.value)} className={inp} placeholder={PEMATERI_NAMA_DEFAULT} /></div>
+                <div><label className={lbl}>Instansi Pemateri 1 <span className="font-semibold text-gray-400">(lembaga induk)</span></label><input type="text" value={exportSiksForm.pemateriInstansi || ""} onChange={(e) => setExportField('pemateriInstansi', e.target.value)} className={inp} placeholder={INSTANSI_DEFAULT} /></div>
+              </div>
+              {[2, 3].map((n) => {
+                const kNama = 'pemateri' + n + 'Nama'; const kInst = 'pemateri' + n + 'Instansi';
+                const tampil = tambahPemateri || exportSiksForm[kNama] || exportSiksForm[kInst];
+                if (!tampil) return null;
+                return (
+                  <div key={n} className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                    <div><label className={lbl}>Nama Pemateri {n} <span className="font-semibold text-gray-400">(peran, opsional)</span></label><input type="text" value={exportSiksForm[kNama] || ""} onChange={(e) => setExportField(kNama, e.target.value)} className={inp} placeholder="mis. Penyuluh Agama KUA" /></div>
+                    <div><label className={lbl}>Instansi Pemateri {n}</label><input type="text" value={exportSiksForm[kInst] || ""} onChange={(e) => setExportField(kInst, e.target.value)} className={inp} placeholder="mis. Kementerian Agama RI" /></div>
+                  </div>
+                );
+              })}
+              {tambahPemateri && (
+                <button type="button" onClick={() => { setTambahPemateri(false); setExportSiksForm((prev) => (prev ? { ...prev, pemateri2Nama: '', pemateri2Instansi: '', pemateri3Nama: '', pemateri3Instansi: '' } : prev)); }} className="text-[10px] font-bold text-gray-400 hover:underline mt-2">- sembunyikan &amp; kosongkan pemateri tambahan</button>
+              )}
+              <p className="text-[10px] text-gray-400 mt-2 leading-relaxed"><b>Nama Pemateri</b> = PERAN/jabatan (contoh: {PEMATERI_NAMA_DEFAULT}) &middot; <b>Instansi</b> = LEMBAGA INDUK (contoh: {INSTANSI_DEFAULT}). Nama orang tidak dipakai di dua kolom ini — nama pribadi sudah ada di lampiran absensi. Slot 2–3 hanya bila ada pemateri tambahan (mis. Penyuluh Agama KUA).</p>
             </div>
 
             <div>
