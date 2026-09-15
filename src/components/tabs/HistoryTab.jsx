@@ -38,20 +38,20 @@ function SessionThumb({ item, loadPhoto }) {
   }, [item, punyaFoto, src, loadPhoto]);
 
   if (!punyaFoto) {
-    return <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"><ImageOff size={11}/> Belum ada foto</span>;
+    return <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60"><ImageOff size={11}/> Belum ada foto</span>;
   }
   if (!src) {
     return (
       <span className="inline-flex items-center gap-2">
-        <span className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0"><Loader2 className="animate-spin text-gray-400" size={12}/></span>
-        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">Memuat foto…</span>
+        <span className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0"><Loader2 className="animate-spin text-gray-400" size={12}/></span>
+        <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500">Memuat foto…</span>
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-2">
-      <img src={src} alt="Foto kegiatan" loading="lazy" className="w-9 h-9 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-700 shrink-0" />
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><Camera size={11}/> Foto</span>
+      <img src={src} alt="Foto kegiatan" loading="lazy" className="w-10 h-10 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-700 shrink-0" />
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><Camera size={11}/> Foto</span>
     </span>
   );
 }
@@ -79,6 +79,12 @@ export default function HistoryTab({
   const [pilihMode, setPilihMode] = useState(false);
   const [terpilih, setTerpilih] = useState(() => new Set());
   const togglePilih = (id) => setTerpilih(prev => { const next = new Set(prev); const k = String(id); if (next.has(k)) next.delete(k); else next.add(k); return next; });
+
+  // Pelipatan panel: (1) Cetak Laporan & Rekap, (2) Filter Sesi.
+  // Default tertutup supaya daftar riwayat langsung terlihat saat halaman dibuka.
+  const [laporanOpen, setLaporanOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const labelBulan = historyFilterMonth === 'all' ? 'Semua Bulan' : NAMA_BULAN[historyFilterMonth];
 
   // Tahun kosong/typo bikin filter tidak cocok sama sekali. Dulu hasilnya "Belum Ada Riwayat"
   // (terkesan data hilang) — sekarang dibedakan dan kolomnya ditandai merah.
@@ -122,8 +128,19 @@ export default function HistoryTab({
   }, [listKey, searchedHistory.length, muatLagi]);
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 items-start">
+    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4">
+        {/* --- LAPORAN & REKAP (accordion induk, tersembunyi agar daftar riwayat langsung terlihat) --- */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+            <button onClick={() => setLaporanOpen(!laporanOpen)} className="w-full flex items-center justify-between gap-3 p-4 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition text-left">
+                <div className="flex items-center gap-2 min-w-0 text-sm font-bold text-gray-800 dark:text-white">
+                    <FileText size={18} className="text-blue-600 shrink-0"/>
+                    <span className="truncate">Cetak Laporan &amp; Rekap</span>
+                    <span className="hidden sm:inline text-[11px] font-normal text-gray-500 dark:text-gray-400 shrink-0">· Bulanan, Semester, Rekap Kecamatan</span>
+                </div>
+                <ChevronDown size={18} className={`text-gray-400 shrink-0 transition-transform duration-300 ${laporanOpen ? 'rotate-180' : ''}`} />
+            </button>
+            <div className={`transition-all duration-300 ease-in-out ${laporanOpen ? 'max-h-[2600px] opacity-100 p-4 pt-0' : 'max-h-0 opacity-0 overflow-hidden px-4'}`}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             {/* --- LAPORAN BULANAN --- */}
             <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
                  <button onClick={() => setIsLaporanBulananOpen(!isLaporanBulananOpen)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
@@ -193,7 +210,7 @@ export default function HistoryTab({
                  <button onClick={() => setIsRekapOpen(!isRekapOpen)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                      <div className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-white">
                          <FileSpreadsheet size={18} className="text-emerald-600"/> Rekap Kecamatan (Excel)
-                         <span className="hidden sm:inline text-[10px] font-normal text-gray-400">· baris data Anda untuk sheet rekap koordinator</span>
+                         <span className="hidden sm:inline text-[11px] font-normal text-gray-400">· baris data Anda untuk sheet rekap koordinator</span>
                      </div>
                      <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 ${isRekapOpen ? 'rotate-180' : ''}`} />
                  </button>
@@ -209,20 +226,33 @@ export default function HistoryTab({
                              <Calculator size={14}/> Hitung &amp; Pratinjau Rekap
                          </button>
                      </div>
-                     <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">Dihitung dari sesi yang sudah diarsipkan ke Riwayat. Hasilnya bisa dikoreksi dulu, lalu diunduh sebagai Excel format resmi atau disalin untuk ditempel ke sheet kecamatan.</p>
+                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-3">Dihitung dari sesi yang sudah diarsipkan ke Riwayat. Hasilnya bisa dikoreksi dulu, lalu diunduh sebagai Excel format resmi atau disalin untuk ditempel ke sheet kecamatan.</p>
                  </div>
             </div>
         </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 sticky top-[70px] z-30 mb-4 flex flex-col gap-3">
-            <input ref={importSiksRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { if (e.target.files && e.target.files[0]) onImportSiksResult(e.target.files[0]); e.target.value = ""; }} />
-            <div className="flex items-center justify-between gap-2">
-                 <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-sm"><Filter size={16} className="text-blue-600"/> Filter Sesi</h3>
-                 <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => importSiksRef.current && importSiksRef.current.click()} title="Tandai sesi yang sudah diinput bot SIKS-NG (pilih status-sudah-*.json dari p2k2-siks-bot)" className="inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-1.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 active:scale-[0.97] transition dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900"><Upload size={11}/> Impor Hasil Bot</button>
-                    <span className="text-[10px] bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full font-extrabold border border-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">{searchedHistory.length} Sesi Ditemukan</span>
-                 </div>
             </div>
+        </div>
+
+        {/* --- FILTER SESI (bisa dilipat agar daftar riwayat langsung terlihat) --- */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 sticky top-[70px] z-30 overflow-hidden">
+            <input ref={importSiksRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { if (e.target.files && e.target.files[0]) onImportSiksResult(e.target.files[0]); e.target.value = ""; }} />
+            <div className="flex items-center gap-2 p-4 sm:p-5">
+                <button onClick={() => setFilterOpen(!filterOpen)} aria-expanded={filterOpen} className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Filter size={16} className="text-blue-600 shrink-0"/>
+                        <span className="font-bold text-gray-800 dark:text-white text-sm shrink-0">Filter Sesi</span>
+                        <span className="hidden sm:inline text-[11px] font-normal text-gray-500 dark:text-gray-400 truncate">· {historyFilterGroup} · {historyFilterYear} · {labelBulan}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full font-extrabold border border-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">{searchedHistory.length} Sesi</span>
+                        <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 ${filterOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                </button>
+                <button onClick={() => importSiksRef.current && importSiksRef.current.click()} title="Tandai sesi yang sudah diinput bot SIKS-NG (pilih status-sudah-*.json dari p2k2-siks-bot)" className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-1.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 active:scale-[0.97] transition dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900"><Upload size={11}/> <span className="hidden sm:inline">Impor Hasil Bot</span></button>
+            </div>
+
+            <div className={`transition-all duration-300 ease-in-out ${filterOpen ? 'max-h-[500px] opacity-100 px-4 sm:px-5 pb-4' : 'max-h-0 opacity-0 overflow-hidden px-4'}`}>
+            <div className="flex flex-col gap-4">
 
             {/* Pencarian: kelompok, materi, atau nama KPM yang ikut di sesi */}
             <div className="flex items-center px-4 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 focus-within:ring-2 focus-within:ring-blue-500">
@@ -269,6 +299,8 @@ export default function HistoryTab({
                     {pilihMode ? <CheckSquare size={13}/> : <Square size={13}/>} {pilihMode ? 'Selesai' : 'Pilih'}
                 </button>
             </div>
+            </div>
+            </div>
         </div>
 
         {/* --- CAPAIAN INPUT: kelompok mana yang sudah & belum diinput --- */}
@@ -282,7 +314,7 @@ export default function HistoryTab({
                     <span className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"><ClipboardList size={16}/></span>
                     <div className="flex-1 min-w-0 leading-tight">
                         <p className="text-sm font-bold text-gray-800 dark:text-white">Capaian Input P2K2</p>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500">{NAMA_BULAN[bulan]} {year} · seluruh kelompok</p>
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500">{NAMA_BULAN[bulan]} {year} · seluruh kelompok</p>
                     </div>
                     <span className={`text-sm font-extrabold shrink-0 ${tuntas ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>{pct}%</span>
                 </div>
@@ -310,7 +342,7 @@ export default function HistoryTab({
                                 </button>
                             ))}
                         </div>
-                        <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">Ketuk kelompok untuk langsung membukanya di tab Input.</p>
+                        <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">Ketuk kelompok untuk langsung membukanya di tab Input.</p>
                     </div>
                 )}
 
@@ -342,7 +374,7 @@ export default function HistoryTab({
                     <span className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"><ClipboardList size={16}/></span>
                     <div className="flex-1 min-w-0 leading-tight">
                         <p className="text-sm font-bold text-gray-800 dark:text-white">Capaian Input P2K2</p>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500">Ringkasan {historyCoverage.year} · ketuk bulan untuk merinci</p>
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500">Ringkasan {historyCoverage.year} · ketuk bulan untuk merinci</p>
                     </div>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
@@ -355,7 +387,7 @@ export default function HistoryTab({
                             : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900';
                         return (
                             <button key={b.bulan} onClick={() => setHistoryFilterMonth(b.bulan)} className={`p-2 rounded-xl border text-center transition active:scale-[0.97] ${gaya}`}>
-                                <p className="text-[9.5px] font-bold uppercase tracking-wide opacity-70">{NAMA_BULAN[b.bulan].slice(0, 3)}</p>
+                                <p className="text-[11px] font-bold uppercase tracking-wide opacity-70">{NAMA_BULAN[b.bulan].slice(0, 3)}</p>
                                 <p className="text-[11px] font-extrabold tabular-nums">{b.belumWaktunya ? '–' : `${b.jumlah}/${historyCoverage.total}`}</p>
                             </button>
                         );
@@ -383,7 +415,7 @@ export default function HistoryTab({
                 icons={[Search, Filter, History]}
             />
         ) : (
-        <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div ref={listRef} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
             {shownHistory.map(h => {
                 const pct = h.stats.total ? Math.round((h.stats.present / h.stats.total) * 100) : 0;
                 const dipilih = terpilih.has(String(h.id));
@@ -391,19 +423,19 @@ export default function HistoryTab({
                 const att = countArchivedAttendance(h.details);
                 const legacy = Array.isArray(h.details) && h.details.length > 0 && h.details.some(isLegacyAttendance);
                 return (
-                <div key={h.id} role={pilihMode ? 'checkbox' : 'button'} aria-checked={pilihMode ? dipilih : undefined} tabIndex={0} onClick={() => (pilihMode ? togglePilih(h.id) : handleEditHistory(h))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (pilihMode) togglePilih(h.id); else handleEditHistory(h); } }} className={`group p-5 rounded-2xl ${cardColor} shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-900 flex flex-col gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${dipilih ? 'ring-2 ring-blue-500 border-blue-300 dark:border-blue-700' : ''}`}>
+                <div key={h.id} role={pilihMode ? 'checkbox' : 'button'} aria-checked={pilihMode ? dipilih : undefined} tabIndex={0} onClick={() => (pilihMode ? togglePilih(h.id) : handleEditHistory(h))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (pilihMode) togglePilih(h.id); else handleEditHistory(h); } }} className={`group p-6 rounded-2xl ${cardColor} shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-900 flex flex-col gap-5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${dipilih ? 'ring-2 ring-blue-500 border-blue-300 dark:border-blue-700' : ''}`}>
                     {/* Header: avatar kelompok + nama + tanggal chip */}
-                    <div className="flex items-start gap-3">
-                        <div className={`w-11 h-11 rounded-xl ${avatarColorFor(h.groupName)} flex items-center justify-center shrink-0 shadow-sm`}>
-                            <span className="text-sm font-extrabold tracking-tight">{h.groupName.charAt(0).toUpperCase()}</span>
+                    <div className="flex items-start gap-4">
+                        <div className={`w-12 h-12 rounded-xl ${avatarColorFor(h.groupName)} flex items-center justify-center shrink-0 shadow-sm`}>
+                            <span className="text-base font-extrabold tracking-tight">{h.groupName.charAt(0).toUpperCase()}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h3 className={`font-bold text-base leading-tight truncate ${textColor}`}>{h.groupName}</h3>
-                            <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                            <h3 className={`font-bold text-lg leading-tight truncate ${textColor}`}>{h.groupName}</h3>
+                            <span className="inline-flex items-center gap-1.5 mt-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                                 <CalendarDays size={11} className="shrink-0"/> {formatTanggal(h.date)}
                             </span>
                             {h.siks === 'sudah' && (
-                                <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900" title="Sesi ini sudah ditandai diinput ke SIKS-NG"><CheckCircle size={11}/> Sudah SIKS</span>
+                                <span className="inline-flex items-center gap-1.5 mt-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900" title="Sesi ini sudah ditandai diinput ke SIKS-NG"><CheckCircle size={11}/> Sudah SIKS</span>
                             )}
                         </div>
                         {pilihMode ? (
@@ -418,38 +450,38 @@ export default function HistoryTab({
                         )}
                     </div>
 
-                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2rem]">{h.materi || '—'}</p>
+                    <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300 line-clamp-2 min-h-[3rem]">{h.materi || '—'}</p>
 
                     <div>
-                        <div className="flex items-baseline justify-between mb-1.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Kehadiran</span>
+                        <div className="flex items-baseline justify-between mb-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Kehadiran</span>
                             <span className={`text-sm font-bold tabular-nums ${textColor}`}>{h.stats.present}<span className="text-gray-400 font-medium text-xs">/{h.stats.total}</span>
-                                <span className="ml-1.5 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">{pct}%</span>
+                                <span className="ml-1.5 text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400">{pct}%</span>
                             </span>
                         </div>
-                        <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                        <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
                             <div className="h-full rounded-full bg-green-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
                         </div>
 
                         {/* Rincian tri-state — dulu hanya tersimpan, kini terlihat sekilas */}
                         {att.total > 0 && (
                             <div className="flex flex-wrap items-center gap-1 mt-2">
-                                <span title="Hadir" className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900 tabular-nums inline-flex items-center gap-1"><Check strokeWidth={3} size={10}/> {att.hadir}</span>
-                                <span title="Sakit" className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900 tabular-nums inline-flex items-center gap-1"><Thermometer size={10}/> {att.sakit}</span>
-                                <span title="Alfa" className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900 tabular-nums inline-flex items-center gap-1"><X size={10}/> {att.alfa}</span>
+                                <span title="Hadir" className="text-[11px] font-extrabold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900 tabular-nums inline-flex items-center gap-1"><Check strokeWidth={3} size={10}/> {att.hadir}</span>
+                                <span title="Sakit" className="text-[11px] font-extrabold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900 tabular-nums inline-flex items-center gap-1"><Thermometer size={10}/> {att.sakit}</span>
+                                <span title="Alfa" className="text-[11px] font-extrabold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900 tabular-nums inline-flex items-center gap-1"><X size={10}/> {att.alfa}</span>
                                 {legacy && (
-                                    <span title="Sesi lama: sakit/alfa hanya perkiraan dari data kehadiran (belum ada penandaan sakit/alfa saat diarsipkan)" className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">perkiraan</span>
+                                    <span title="Sesi lama: sakit/alfa hanya perkiraan dari data kehadiran (belum ada penandaan sakit/alfa saat diarsipkan)" className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">perkiraan</span>
                                 )}
                             </div>
                         )}
                     </div>
 
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between pt-5 border-t border-gray-100 dark:border-gray-800">
                         <SessionThumb item={h} loadPhoto={loadPhoto} />
                         {pilihMode ? (
-                            <span className={`text-[11px] font-bold ${dipilih ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}>{dipilih ? 'Dipilih' : 'Ketuk untuk memilih'}</span>
+                            <span className={`text-xs font-bold ${dipilih ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>{dipilih ? 'Dipilih' : 'Ketuk untuk memilih'}</span>
                         ) : (
-                            <span className="text-[11px] text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors flex items-center gap-0.5">Ketuk untuk edit <ChevronRight size={13}/></span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-blue-500 transition-colors flex items-center gap-1">Ketuk untuk edit <ChevronRight size={13}/></span>
                         )}
                     </div>
                 </div>
