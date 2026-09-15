@@ -288,11 +288,11 @@ export default function HistoryTab({
             <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2 flex-1 min-w-0 py-2.5 px-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl">
                     <ArrowUpDown size={14} className="text-gray-400 shrink-0"/>
-                    <select value={historySort} onChange={(e) => setHistorySort(e.target.value)} aria-label="Urutkan sesi riwayat" className="flex-1 min-w-0 bg-transparent border-none outline-none text-xs font-bold text-gray-700 dark:text-gray-200">
+                    <select value={historySort} onChange={(e) => setHistorySort(e.target.value)} aria-label="Urutkan sesi riwayat" title="Urutkan daftar sesi" className="flex-1 min-w-0 bg-transparent border-none outline-none text-[13px] font-bold text-gray-700 dark:text-gray-100 cursor-pointer pr-1">
                         <option value="terbaru">Terbaru dulu</option>
                         <option value="terlama">Terlama dulu</option>
                         <option value="kelompok">Nama kelompok (A-Z)</option>
-                        <option value="hadir-terendah">Kehadiran terendah (perlu tindak lanjut)</option>
+                        <option value="hadir-terendah">Kehadiran terendah</option>
                     </select>
                 </div>
                 <button type="button" onClick={() => { setPilihMode(v => !v); setTerpilih(new Set()); }} title={pilihMode ? 'Selesai memilih' : 'Pilih beberapa sesi untuk dihapus sekaligus'} aria-pressed={pilihMode} className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border transition active:scale-[0.97] ${pilihMode ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>

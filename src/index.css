@@ -25,6 +25,26 @@
   .tabular-nums, h2, h3 {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Dropdown <option>: browser TIDAK mewarisi warna dari <select>, sehingga di mode
+     gelap daftar opsi tampil putih menyilaukan dan teksnya nyaris tak terbaca.
+     Dipaksa ikut tema supaya semua <select> di aplikasi konsisten & nyaman dibaca. */
+  select option,
+  select optgroup {
+    background-color: #ffffff;
+    color: #111827; /* gray-900 */
+  }
+  .dark select option,
+  .dark select optgroup {
+    background-color: #1f2937; /* gray-800 */
+    color: #f3f4f6;            /* gray-100 */
+  }
+  /* Opsi yang sedang aktif diberi aksen biru supaya jelas mana yang terpilih */
+  select option:checked {
+    background-color: #2563eb; /* blue-600 */
+    color: #ffffff;
+  }
+  select { cursor: pointer; }
 }
 
 @layer utilities {
