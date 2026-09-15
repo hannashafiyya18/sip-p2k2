@@ -26,39 +26,46 @@ export const NAMA_SIKS_MAX = 100;
 export const URAIAN_SIKS_MAX = 1000;
 
 // ---------------------------------------------------------------------------
-// Baku PEMATERI (arahan Mas 2026-09-14) — dua kolom SIKS dipisah tegas:
-//   "Nama Pemateri"     = PERAN / jabatan fungsional  (mis. "Pendamping Sosial PKH")
-//   "Instansi Pemateri" = LEMBAGA INDUK               (mis. "Kementerian Sosial RI")
-// Nama ORANG tidak dipakai di dua kolom itu — nama pribadi sudah tercetak di
-// lampiran absensi & kop laporan. Sebelum perbaikan ini default app TERTUKAR:
-// nama pendamping masuk ke "Nama Pemateri", dan peran masuk ke "Instansi Pemateri".
+// Baku PEMATERI (keputusan Mas 2026-09-15, setelah melihat CETAKAN laporan SIKS):
+//   form SIKS : "Nama Pemateri"  +  "Instansi Pemateri"
+//   cetak PDF : "Nama Pemateri"  +  "Jabatan / Instansi"     <- LABEL BERBEDA
+// Kesimpulannya: kolom "Nama Pemateri" diisi NAMA ORANG, kolom kedua diisi
+// LEMBAGA INDUK. Peran/jabatan tidak ikut ke kolom kedua (pilihan Mas: "nama
+// bersih + instansi saja") — peran tetap muncul di RANGKUMAN kegiatan lewat
+// buildUraianSIKS() ("..., dipandu oleh <nama> (<jabatan>) dari <lembaga>.").
 // ---------------------------------------------------------------------------
-export const PEMATERI_NAMA_DEFAULT = 'Pendamping Sosial PKH';
+export const PEMATERI_JABATAN_DEFAULT = 'Pendamping Sosial PKH';
 export const INSTANSI_DEFAULT = 'Kementerian Sosial RI';
 
-// Pilihan cepat di dialog export: pasangan PERAN + LEMBAGA INDUK.
-export const PEMATERI_BAKU = [
-  { nama: 'Pendamping Sosial PKH', instansi: 'Kementerian Sosial RI' },
-  { nama: 'Penyuluh Agama KUA', instansi: 'Kementerian Agama RI' },
-  { nama: 'Petugas Puskesmas', instansi: 'Dinas Kesehatan Kabupaten' },
-  { nama: 'Kader P2K2', instansi: 'Kementerian Sosial RI' },
+// Pilihan cepat ISI KOLOM KEDUA (lembaga induk) di dialog export.
+export const INSTANSI_CEPAT = [
+  'Kementerian Sosial RI',
+  'Kementerian Agama RI',
+  'Dinas Kesehatan Kabupaten',
+  'Pemerintah Kabupaten Sleman',
 ];
 
-// Kata penanda PERAN/jabatan -> supaya peringatan "ini nama orang" tidak salah
-// tuduh pada peran yang sah (mis. "Bidan Desa" bukan nama orang).
+// Kata penanda PERAN/jabatan (dipakai mendeteksi kolom Nama yang isinya peran,
+// bukan nama orang) dan kata penanda LEMBAGA (memeriksa kolom kedua).
 const KATA_PERAN = /(pendamping|penyuluh|petugas|kader|bidan|perawat|dokter|guru|ustad|pemateri|fasilitator|koordinator|kepala|sekretaris|babinsa|asn|pppk|pns|pegawai|anggota|relawan|konselor|psikolog|perangkat|kades|lurah|ketua|dinas|kementerian|lembaga|badan|puskesmas|posyandu|kua|balai|uptd|pemerintah|sekolah)/i;
 
-/** Deteksi longgar: apakah isi kolom pemateri ini NAMA ORANG (bukan peran)?
- *  HANYA untuk memperingatkan di dialog export — tidak memblokir apa pun, karena
- *  pendamping yang tahu kondisi nyata di lapangan. */
-export function tampakNamaOrang(teks, namaPendamping) {
+const KATA_LEMBAGA = /(kementerian|dinas|pemerintah|pemkab|pemkot|badan|lembaga|balai|uptd|puskesmas|sekolah|kampus|universitas|polres|kodim|kua|bkkbn|bpn|baznas|kejaksaan|pengadilan)/i;
+
+/** Kolom "Nama Pemateri" ternyata berisi PERAN (mis. "Pendamping Sosial PKH"),
+ *  bukan nama orang -> laporan SIKS akan tercetak tanpa nama pemateri.
+ *  HANYA peringatan (tidak memblokir): pendamping yang tahu kondisi nyata. */
+export function tampakPeranSaja(teks) {
   const t = normTeks(teks);
   if (!t) return false;
-  const pd = normTeks(namaPendamping).toLowerCase();
-  if (pd && t.toLowerCase() === pd) return true;            // persis nama pendamping
-  if (t.split(' ').length < 2) return false;                // satu kata: bukan nama khas
-  if (KATA_PERAN.test(t)) return false;                     // peran/jabatan -> bukan nama orang
-  return t.split(' ').every((k) => /^[A-Z\u00C0-\u00DD]/.test(k));
+  if (!KATA_PERAN.test(t)) return false;      // "Muhammad As'adur Rofiq" -> tidak kena
+  return t.split(' ').length <= 6;            // kalimat panjang -> bukan sekadar peran
+}
+
+/** Kolom kedua berisi LEMBAGA INDUK? (yang dicetak di baris "Jabatan / Instansi") */
+export function tampakLembaga(teks) {
+  const t = normTeks(teks);
+  if (!t) return false;
+  return KATA_LEMBAGA.test(t);
 }
 
 // Jargon judul modul yang selalu berulang -> dibuang supaya nama pendek.
@@ -145,25 +152,28 @@ export function buildExportKegiatan(h, form) {
   if (!materiSiks) masalah.push('Pilih kategori Materi SIKS dari daftar yang tersedia.');
 
   const tempat = normTeks(form.tempat) || normTeks(h.tempat);
-  // Pemateri: SIKS menyediakan 3 pasang kolom. Slot 1 default instansinya
-  // Kementerian Sosial RI; slot 2-3 hanya dipakai bila memang ada pihak lain
-  // (mis. Penyuluh Agama KUA) dan instansinya WAJIB ikut diisi — tidak ditebak.
+  // Pemateri: SIKS punya 3 pasang kolom. Yang dikirim: NAMA ORANG -> kolom "Nama
+  // Pemateri"; LEMBAGA INDUK -> kolom "Instansi Pemateri" (tercetak sebagai baris
+  // "Jabatan / Instansi"). Slot 2-3 hanya bila ada pemateri tambahan.
   const slotsPemateri = [
-    ['', normTeks(form.pemateriNama), normTeks(form.pemateriInstansi) || INSTANSI_DEFAULT],
-    [' 2', normTeks(form.pemateri2Nama), normTeks(form.pemateri2Instansi)],
-    [' 3', normTeks(form.pemateri3Nama), normTeks(form.pemateri3Instansi)],
+    ['', form.pemateriNama, form.pemateriInstansi, true],
+    [' 2', form.pemateri2Nama, form.pemateri2Instansi, false],
+    [' 3', form.pemateri3Nama, form.pemateri3Instansi, false],
   ];
   const pemateri = [];
-  for (const [slot, namaPemateri, instansiPemateri] of slotsPemateri) {
-    if (!namaPemateri) continue;
-    if (tampakNamaOrang(namaPemateri, form.pendamping)) {
-      peringatan.push(`Nama Pemateri${slot} berisi sepertinya NAMA ORANG ("${namaPemateri}"). Kolom ini minta PERAN (mis. "${PEMATERI_NAMA_DEFAULT}"); nama pribadi sudah ada di lampiran absensi.`);
+  for (const [slot, namaMentah, instansiMentah, utama] of slotsPemateri) {
+    const namaPemateri = normTeks(namaMentah);
+    // Instansi default (Kemensos) hanya bila memang ada nama pematerinya,
+    // supaya kolom nama yang dikosongkan tidak diam-diam mengirim instansi.
+    const instansiPemateri = normTeks(instansiMentah) || (utama && namaPemateri ? INSTANSI_DEFAULT : '');
+    if (!namaPemateri && !instansiPemateri) continue;
+    if (tampakPeranSaja(namaPemateri)) {
+      peringatan.push(`Nama Pemateri${slot} berisi PERAN ("${namaPemateri}"), bukan nama orang — laporan SIKS akan tercetak tanpa nama pemateri (perannya sudah muncul di rangkuman). Isi nama orangnya.`);
     }
-    if (PEMATERI_BAKU.some((p) => p.nama.toLowerCase() === instansiPemateri.toLowerCase())) {
-      peringatan.push(`Instansi Pemateri${slot} berisi PERAN ("${instansiPemateri}") — kolom ini minta LEMBAGA INDUK (mis. "${INSTANSI_DEFAULT}").`);
-    }
-    if (slot && !instansiPemateri) {
-      peringatan.push(`Instansi Pemateri${slot} belum diisi — sebutkan lembaga induknya (mis. "Kementerian Agama RI").`);
+    if (!instansiPemateri) {
+      peringatan.push(`Instansi Pemateri${slot} belum diisi — tulis lembaga induknya (mis. "Kementerian Agama RI"); baris "Jabatan / Instansi" di laporan cetak diambil dari kolom ini.`);
+    } else if (!tampakLembaga(instansiPemateri)) {
+      peringatan.push(`Instansi Pemateri${slot} ("${instansiPemateri}") sepertinya bukan nama lembaga — isi lembaga induknya (mis. "${INSTANSI_DEFAULT}").`);
     }
     pemateri.push({ nama: namaPemateri, instansi: instansiPemateri });
   }
@@ -386,16 +396,20 @@ export function buildUraianSIKS(h, opsi = {}) {
   const j2 = HHmm(opsi.jamSelesai || (h && h.jamSelesai));
   const jam = j1 && j2 ? `${j1}-${j2}` : (j1 || j2 || '');
   const tempat = normTeks(opsi.tempat || (h && h.tempat)) || 'tempat kegiatan';
-  // Peran + lembaga induk (bukan nama orang) — nama orang sengaja tidak dipakai.
-  const daftarPeran = [
-    [normTeks(opsi.pemateriNama), normTeks(opsi.pemateriInstansi) || INSTANSI_DEFAULT],
-    [normTeks(opsi.pemateri2Nama), normTeks(opsi.pemateri2Instansi)],
-    [normTeks(opsi.pemateri3Nama), normTeks(opsi.pemateri3Instansi)],
-  ].filter(([n]) => n);
-  const sebutPeran = (n, i) => `${n}${i ? ` dari ${i}` : ''}`;
-  const frasePemateri = daftarPeran.length
-    ? `, dipandu oleh ${sebutPeran(daftarPeran[0][0], daftarPeran[0][1])}`
-      + (daftarPeran.length > 1 ? ` bersama ${daftarPeran.slice(1).map(([n, i]) => sebutPeran(n, i)).join(' dan ')}` : '')
+  // "... dipandu oleh <nama orang> (<jabatan>) dari <lembaga induk>." — peran tetap
+  // disebut di rangkuman walau kolom SIKS hanya memuat nama + lembaga.
+  const daftarPemateri = [
+    [normTeks(opsi.pemateriNama), normTeks(opsi.pemateriJabatan) || PEMATERI_JABATAN_DEFAULT, normTeks(opsi.pemateriInstansi) || INSTANSI_DEFAULT],
+    [normTeks(opsi.pemateri2Nama), normTeks(opsi.pemateri2Jabatan), normTeks(opsi.pemateri2Instansi)],
+    [normTeks(opsi.pemateri3Nama), normTeks(opsi.pemateri3Jabatan), normTeks(opsi.pemateri3Instansi)],
+  ].filter(([n, j, i]) => n || j || i);
+  const rangkaiPemateri = ([n, j, i]) => {
+    const inti = n && j ? `${n} (${j})` : (n || j || i);
+    return i && inti !== i ? `${inti} dari ${i}` : inti;
+  };
+  const frasePemateri = daftarPemateri.length
+    ? `, dipandu oleh ${rangkaiPemateri(daftarPemateri[0])}`
+      + (daftarPemateri.length > 1 ? ` bersama ${daftarPemateri.slice(1).map(rangkaiPemateri).join(' dan ')}` : '')
     : '';
   const materi = ringkasModulSiks((h && h.materi) || '') || 'P2K2';
   const takHadir = st.sakit + st.alfa;
@@ -434,7 +448,7 @@ export function buildUraianSIKS(h, opsi = {}) {
 /** Isi awal formulir export saat sesi dibuka (default yang bisa diedit). */
 export function defaultFormExport(h, pendamping) {
   const tanggal = normTeks(h.date) || new Date().toISOString().split('T')[0];
-  const peran = normTeks(h && h.pemateri) || PEMATERI_NAMA_DEFAULT;
+  const jabatan = normTeks(h && h.pemateri) || PEMATERI_JABATAN_DEFAULT;
   return {
     nama: namaKegiatanSIKS(h),
     materiSiks: guessSiksMateri(h.materi),
@@ -442,13 +456,15 @@ export function defaultFormExport(h, pendamping) {
     jamMulai: HHmm(h.jamMulai) || '09:00',
     jamSelesai: HHmm(h.jamSelesai) || '11:00',
     tempat: normTeks(h.tempat),
-    // Kolom "Pemateri" sesi memang berisi PERAN (default app "Pendamping Sosial
-    // PKH") -> dipakai apa adanya; instansinya lembaga induk. Nama pendamping
-    // TIDAK lagi masuk ke kolom ini (bug pengisian 2026-09-14).
-    pemateriNama: peran,
+    // Kolom "Nama Pemateri" = NAMA ORANG (nama pendamping dari Identitas; diganti
+    // kalau pematerinya orang lain). Jabatan dipakai di rangkuman saja; kolom
+    // "Instansi Pemateri" = lembaga induk.
+    pemateriNama: normTeks(pendamping),
+    pemateriJabatan: jabatan,
     pemateriInstansi: INSTANSI_DEFAULT,
-    pemateri2Nama: '', pemateri2Instansi: '', pemateri3Nama: '', pemateri3Instansi: '',
-    uraian: buildUraianSIKS(h, { pemateriNama: peran, pemateriInstansi: INSTANSI_DEFAULT }).uraian,
+    pemateri2Nama: '', pemateri2Jabatan: '', pemateri2Instansi: '',
+    pemateri3Nama: '', pemateri3Jabatan: '', pemateri3Instansi: '',
+    uraian: buildUraianSIKS(h, { pemateriNama: normTeks(pendamping), pemateriJabatan: jabatan, pemateriInstansi: INSTANSI_DEFAULT }).uraian,
     periodeSalur: '',
     pendamping: normTeks(pendamping),
   };
