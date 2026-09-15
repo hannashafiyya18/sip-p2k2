@@ -790,7 +790,11 @@ export default function App() {
           materi: historyItem.materi || "",
           pemateri: historyItem.pemateri || "",
           fotoKegiatan: historyItem.fotoKegiatan || null,
-          tanggal: historyItem.date || ""
+          tanggal: historyItem.date || "",
+          // JAM ikut dimuat & bisa disimpan (perbaikan 2026-09-15). Sebelumnya jam hanya
+          // bisa disetel di Konfigurasi SEBELUM sesi disimpan, tak bisa diperbaiki lagi.
+          jamMulai: historyItem.jamMulai || "",
+          jamSelesai: historyItem.jamSelesai || ""
       });
       setHistoryEditSearch("");
       setHistoryMetaOpen(false);
@@ -867,7 +871,7 @@ export default function App() {
               showToast("Perubahan Riwayat Disimpan");
           } catch (e) { console.error("Update History Error", e); showAlert("Error", "Gagal menyimpan perubahan ke database."); }
       } else { showToast("Perubahan Riwayat Disimpan (Lokal)"); }
-      setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch("");
+      setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "", jamMulai: "", jamSelesai: "" }); setHistoryEditSearch("");
   };
 
   const handleProposeGraduation = (item) => { if (item.graduationStatus) { showToast("KPM sudah dalam daftar usulan graduasi."); return; } updateKpmItem({ ...item, graduationStatus: 'proposed' }); showToast("Berhasil diusulkan graduasi"); };
@@ -1939,7 +1943,7 @@ export default function App() {
           <div className="fixed inset-0 z-[100] bg-gray-100/90 dark:bg-gray-950/90 backdrop-blur-md flex flex-col animate-in fade-in">
               <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 shadow-sm flex items-center justify-between">
                   <div><h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><History className="text-blue-600"/> Edit Riwayat Sesi</h2><p className="text-xs text-gray-500 dark:text-gray-400">{editingHistory.groupName} - {tempHistoryMeta.tanggal || editingHistory.date}</p></div>
-                  <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch(""); }} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"><X size={20} className="text-gray-500 dark:text-gray-400"/></button>
+                  <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "", jamMulai: "", jamSelesai: "" }); setHistoryEditSearch(""); }} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"><X size={20} className="text-gray-500 dark:text-gray-400"/></button>
               </div>
               <div className="bg-gray-50 dark:bg-gray-900/50 p-2 flex flex-wrap gap-2 justify-center border-b border-gray-100 dark:border-gray-800">
                   <button onClick={() => handleMarkAllTempPresent(true)} className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-bold hover:border-green-300 hover:text-green-700 dark:hover:text-green-400 transition flex items-center gap-1.5"><CheckCheck size={14} className="text-green-500"/> Hadirkan Semua</button>
@@ -1963,9 +1967,20 @@ export default function App() {
 
                       <div className={`transition-all duration-300 ease-in-out overflow-hidden ${historyMetaOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
                           <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div>
-                                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tanggal</label>
-                                  <input type="date" value={tempHistoryMeta.tanggal} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tanggal: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" />
+                              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div>
+                                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tanggal</label>
+                                      <input type="date" value={tempHistoryMeta.tanggal} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, tanggal: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" />
+                                  </div>
+                                  <div>
+                                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Jam Mulai</label>
+                                      <input type="time" value={tempHistoryMeta.jamMulai || ""} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, jamMulai: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" />
+                                  </div>
+                                  <div>
+                                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Jam Selesai</label>
+                                      <input type="time" value={tempHistoryMeta.jamSelesai || ""} onChange={e=>setTempHistoryMeta({...tempHistoryMeta, jamSelesai: e.target.value})} className="w-full text-sm p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 outline-none focus:border-blue-500 dark:text-white" />
+                                  </div>
+                                  <p className="sm:col-span-3 text-[10px] text-gray-400 leading-relaxed">Jam ini ikut tersimpan dan dipakai di laporan SIKS — baris <b>Waktu Pelaksanaan</b> serta rangkuman kegiatan ("... pukul 09:30-11:30 WIB ..."). Ubah di sini, lalu <b>Simpan Perubahan</b>.</p>
                               </div>
                               <div>
                                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tempat</label>
@@ -2055,7 +2070,7 @@ export default function App() {
                           <span className="font-bold text-red-500">{tempHistoryDetails.filter(d => archivedStatus(d) === ATTENDANCE_ALFA).length}</span> Alfa
                       </div>
                       <div className="flex gap-3 w-full sm:w-auto">
-                          <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "" }); setHistoryEditSearch(""); }} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">Batal</button>
+                          <button onClick={() => { setEditingHistory(null); setTempHistoryDetails([]); setTempHistoryMeta({ tempat: "", materi: "", pemateri: "", fotoKegiatan: null, tanggal: "", jamMulai: "", jamSelesai: "" }); setHistoryEditSearch(""); }} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition">Batal</button>
                           <button onClick={saveHistoryEdit} className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition flex items-center justify-center gap-2"><Save size={18}/> Simpan Perubahan</button>
                       </div>
                   </div>
