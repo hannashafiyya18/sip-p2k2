@@ -45,6 +45,16 @@
     color: #ffffff;
   }
   select { cursor: pointer; }
+
+  /* Input tanggal/jam native: di mode gelap Chrome merender ikon kalender/jam &
+     popup picker-nya bertema TERANG, sehingga nyaris tak terlihat di latar gelap.
+     color-scheme memaksa kontrol native ikut tema gelap. */
+  .dark input[type="date"],
+  .dark input[type="time"],
+  .dark input[type="datetime-local"],
+  .dark input[type="month"] {
+    color-scheme: dark;
+  }
 }
 
 @layer utilities {
