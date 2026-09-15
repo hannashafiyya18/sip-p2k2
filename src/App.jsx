@@ -25,9 +25,8 @@ import InputTab from './components/tabs/InputTab';
 import JurnalTab from './components/tabs/JurnalTab';
 import HistoryTab from './components/tabs/HistoryTab';
 import GraduasiTab from './components/tabs/GraduasiTab';
-import ChatBot from './components/layout/ChatBot';
 
-import { parseAgentCommand, matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
+import { matchGroup, matchKpmByName, extractKtpData, extractAttendanceSheet, matchMateri } from './services/aiAgent';
 import { defaultFormExport, buildExportKegiatan, namaFileExport, unduhJson, unduhDataUrl, bacaIdsSukses, namaKegiatanSIKS, buildUraianSIKS, padatkanUraianSiks, PEMATERI_JABATAN_DEFAULT, INSTANSI_DEFAULT, INSTANSI_CEPAT } from './utils/siksGenerator';
 
 // --- KOMPONEN BANTUAN UI ---
@@ -924,140 +923,6 @@ export default function App() {
   };
   */
 
-  // --- AI AGENT (DIKTE SUARA / PERINTAH TEKS) ---
-  // Menerima kalimat natural, menerjemahkannya ke perintah, lalu mengeksekusi aksi
-  // pada data kehadiran. Mengembalikan { message } untuk ditampilkan di chat,
-  // atau null agar chatbot memprosesnya sebagai obrolan biasa.
-  const handleAgentCommand = async (text) => {
-    const cleanGroups = dynamicGroups.filter(g => g !== "Semua Kelompok");
-    const todayISO = currentConfig.tanggal || new Date().toISOString().split('T')[0];
-
-    let cmd;
-    try {
-      cmd = await parseAgentCommand(text, { groups: cleanGroups, currentGroup: selectedGroup, todayISO });
-    } catch (e) {
-      return { message: `⚠️ ${e.message || 'Gagal memproses perintah suara.'}` };
-    }
-    if (!cmd || cmd.intent === 'chat') return null; // biarkan chatbot menjawab biasa
-
-    // Tentukan kelompok target
-    let targetGroup = selectedGroup;
-    if (cmd.group) {
-      const mg = matchGroup(cmd.group, cleanGroups);
-      if (mg) { targetGroup = mg; setSelectedGroup(mg); }
-      else targetGroup = cmd.group;
-    }
-
-    // Tentukan tanggal target
-    const targetDate = cmd.date || currentConfig.tanggal;
-    if (cmd.date) handleConfigChange('tanggal', cmd.date);
-
-    const groupList = targetGroup === "Semua Kelompok" ? data : data.filter(d => d.group === targetGroup);
-
-    switch (cmd.intent) {
-      case 'select_group': {
-        if (!cleanGroups.includes(targetGroup)) return { message: `⚠️ Kelompok "${cmd.group}" tidak ditemukan. Kelompok tersedia: ${cleanGroups.join(', ') || '-'}.` };
-        return { message: `✅ Kelompok **${targetGroup}** dipilih (${groupList.length} KPM).` };
-      }
-
-      case 'set_date':
-        return { message: `✅ Tanggal pertemuan diubah menjadi **${targetDate}**.` };
-
-      case 'mark_all': {
-        if (groupList.length === 0) return { message: `⚠️ Tidak ada KPM di kelompok "${targetGroup}".` };
-        const presence = cmd.presence !== false;
-        const updates = groupList.filter(k => k.presence !== presence || !isAttendanceStatus(k.status));
-        for (const k of updates) await updateKpmItem({ ...k, status: statusDariBoolean(k, presence), presence, understanding: presence ? 'Baik' : '-' });
-        return { message: `✅ ${updates.length} KPM di **${targetGroup}** ditandai **${presence ? 'HADIR' : 'TIDAK HADIR'}**.` };
-      }
-
-      case 'save_session': {
-        if (groupList.length === 0) return { message: `⚠️ Tidak ada data di "${targetGroup}" untuk disimpan.` };
-        const cfg = cmd.date ? { ...currentConfig, tanggal: cmd.date } : currentConfig;
-        await performArchive(groupList, targetGroup, cfg);
-        setActiveTab('history');
-        return { message: `💾 Sesi **${targetGroup}** (${targetDate}) disimpan ke Riwayat dan ceklis kehadiran direset.` };
-      }
-
-      case 'add_kpm': {
-        const k = cmd.kpm || {};
-        const name = (k.name || '').trim();
-        if (!name) return { message: '⚠️ Nama KPM belum tertangkap. Sebutkan minimal nama lengkapnya, contoh: "Tambah KPM baru nama Siti Aminah kelompok Rajek Depok, komponen 2 SD 1 balita".' };
-
-        // Tentukan kelompok KPM: dari perintah, atau kelompok yang sedang dibuka
-        let kpmGroup = cmd.group ? (matchGroup(cmd.group, cleanGroups) || cmd.group.trim()) : (selectedGroup !== 'Semua Kelompok' ? selectedGroup : null);
-        if (!kpmGroup) return { message: `⚠️ Kelompok belum jelas untuk KPM "${name}". Sebutkan kelompoknya, contoh: "...kelompok Rajek Depok".` };
-
-        // Cegah dobel: nama sama persis di kelompok yang sama
-        const dup = data.find(d => d.group === kpmGroup && (d.name || '').trim().toLowerCase() === name.toLowerCase());
-        if (dup) return { message: `⚠️ KPM "${dup.name}" sudah ada di kelompok **${kpmGroup}**, jadi tidak ditambahkan agar tidak dobel. Kalau memang orang berbeda, tambahkan lewat tombol +.` };
-
-        const compLabels = { sd: 'SD', smp: 'SMP', sma: 'SMA', balita: 'Balita', hamil: 'Bumil', disabilitas: 'Disabilitas', lansia: 'Lansia' };
-        const rawComp = k.components || {};
-        const components = {};
-        for (const key of Object.keys(compLabels)) { const v = parseInt(rawComp[key]); if (!isNaN(v) && v > 0) components[key] = v; }
-
-        const newItem = {
-          id: Date.now(), name,
-          nik: (k.nik || '').toString().replace(/\s/g, '').trim(),
-          noKK: (k.noKK || '').toString().replace(/\s/g, '').trim(),
-          bpnt: k.bpnt === true, group: kpmGroup, address: (k.address || '').trim(),
-          components, presence: false, status: null, understanding: '-', note: '', graduationStatus: null,
-          desa: '', kecamatan: '', kabupaten: '', provinsi: ''
-        };
-        await updateKpmItem(newItem);
-        setSelectedGroup(kpmGroup);
-
-        const compSummary = Object.keys(components).length ? Object.entries(components).map(([kk, v]) => `${v} ${compLabels[kk]}`).join(', ') : 'belum ada';
-        const details = [
-          `👤 **${name}**`,
-          `🏘️ Kelompok: ${kpmGroup}`,
-          newItem.nik ? `🆔 NIK: ${newItem.nik}` : null,
-          newItem.noKK ? `📄 No. KK: ${newItem.noKK}` : null,
-          newItem.address ? `📍 Alamat: ${newItem.address}` : null,
-          `🧩 Komponen: ${compSummary}`,
-          `🛒 BPNT: ${newItem.bpnt ? 'Ya' : 'Tidak'}`
-        ].filter(Boolean).join('\n');
-        return { message: `✅ KPM baru ditambahkan:\n${details}\n\nSilakan cek di daftar. Kalau NIK/alamat perlu dilengkapi, ketuk kartu KPM untuk mengedit.` };
-      }
-
-      case 'attendance': {
-        if (groupList.length === 0) return { message: `⚠️ Tidak ada KPM di kelompok "${targetGroup}".` };
-        const presence = cmd.presence !== false; // default: hadir, kecuali eksplisit "tidak hadir"
-        const done = [], notFound = [], ambiguous = [];
-        const matchedIds = new Set();
-
-        for (const name of cmd.names) {
-          const res = matchKpmByName(name, groupList);
-          if (res.match) {
-            await updateKpmItem({ ...res.match, status: statusDariBoolean(res.match, presence), presence, understanding: presence ? 'Baik' : '-' });
-            done.push(res.match.name); matchedIds.add(res.match.id);
-          } else if (res.candidates.length) {
-            ambiguous.push(`❓ "${name}" mirip beberapa nama: ${res.candidates.map(c => c.name).join(', ')}. Sebutkan lebih lengkap.`);
-          } else {
-            notFound.push(name);
-          }
-        }
-
-        if (cmd.othersPresence === true || cmd.othersPresence === false) {
-          const others = groupList.filter(k => !matchedIds.has(k.id) && (k.presence !== cmd.othersPresence || !isAttendanceStatus(k.status)));
-          for (const k of others) await updateKpmItem({ ...k, status: statusDariBoolean(k, cmd.othersPresence), presence: cmd.othersPresence, understanding: cmd.othersPresence ? 'Baik' : '-' });
-        }
-
-        const parts = [];
-        if (done.length) parts.push(`${presence ? '✅ Ditandai HADIR' : '❌ Ditandai TIDAK HADIR'} di **${targetGroup}**: ${done.join(', ')}`);
-        parts.push(...ambiguous);
-        if (notFound.length) parts.push(`⚠️ Tidak ditemukan: ${notFound.join(', ')}`);
-        if (cmd.othersPresence === true || cmd.othersPresence === false) parts.push(`KPM lainnya di **${targetGroup}** ditandai ${cmd.othersPresence ? 'HADIR' : 'TIDAK HADIR'}.`);
-        return { message: parts.join('\n') || 'Tidak ada perubahan yang dilakukan.' };
-      }
-
-      default:
-        return null;
-    }
-  };
-
-  // --- PDF WRAPPERS ---
   // Satu pintu untuk mengambil foto sebuah sesi (inline untuk sesi lama, koleksi
   // history_media untuk sesi baru) — dipakai laporan bulanan & kartu di tab Riwayat.
   const muatFoto = useCallback((item) => muatFotoSesi({ db, appId, uid: user?.uid, item }), [user]);
@@ -1726,7 +1591,6 @@ export default function App() {
 
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <ChatBot stats={stats} dynamicGroups={dynamicGroups} onAgentCommand={handleAgentCommand} />
 
       {exportSiksNode}
 
